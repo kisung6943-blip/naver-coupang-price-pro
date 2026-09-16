@@ -1116,15 +1116,29 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                               
                               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                                 {item.naverUrl ? (
-                                  <a 
-                                    href={item.naverUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-medium transition-colors"
-                                  >
-                                    네이버 쇼핑 <ExternalLink size={8} />
-                                  </a>
+                                  <div className="inline-flex items-center bg-amber-50 border border-amber-200/80 rounded overflow-hidden shadow-2xs">
+                                    <a 
+                                      href={item.naverUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-[10px] text-amber-800 hover:bg-amber-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-amber-200/60"
+                                      title="네이버 쇼핑 페이지 열기"
+                                    >
+                                      네이버 쇼핑 <ExternalLink size={8} />
+                                    </a>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(item.naverUrl!);
+                                        showToast(`📋 [네이버 쇼핑 URL] 복사되었습니다!`);
+                                      }}
+                                      className="text-[10px] text-amber-700 hover:bg-amber-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
+                                      title="네이버 쇼핑 URL 복사하기"
+                                    >
+                                      <Copy size={9} /> 복사
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button
                                     onClick={(e) => {
@@ -1138,15 +1152,29 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                 )}
 
                                 {item.coupangUrl ? (
-                                  <a 
-                                    href={item.coupangUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-medium transition-colors"
-                                  >
-                                    쿠팡 바로가기 <ExternalLink size={8} />
-                                  </a>
+                                  <div className="inline-flex items-center bg-blue-50 border border-blue-200/80 rounded overflow-hidden shadow-2xs">
+                                    <a 
+                                      href={item.coupangUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-[10px] text-blue-800 hover:bg-blue-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-blue-200/60"
+                                      title="쿠팡 쇼핑 페이지 열기"
+                                    >
+                                      쿠팡 바로가기 <ExternalLink size={8} />
+                                    </a>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(item.coupangUrl!);
+                                        showToast(`📋 [쿠팡 바로가기 URL] 복사되었습니다!`);
+                                      }}
+                                      className="text-[10px] text-blue-700 hover:bg-blue-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
+                                      title="쿠팡 바로가기 URL 복사하기"
+                                    >
+                                      <Copy size={9} /> 복사
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button
                                     onClick={(e) => {
