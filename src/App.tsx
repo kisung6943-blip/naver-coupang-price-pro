@@ -166,49 +166,115 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
   // Initialize data from Supabase, fallback to LocalStorage or seed data
   useEffect(() => {
     const initData = async () => {
+      let currentProducts: Product[] = [];
+      let currentLogs: PriceLog[] = [];
+
       try {
         const { data: prodData, error: prodErr } = await supabase.from("products").select("*");
         const { data: logData, error: logErr } = await supabase.from("price_logs").select("*");
         
         if (!prodErr && prodData && prodData.length > 0) {
-          setProducts(prodData);
-          setPriceLogs(logData || []);
-          setIsLoading(false);
-          return;
+          currentProducts = prodData;
+          currentLogs = logData || [];
         }
       } catch (err) {
         console.error("Supabase load error:", err);
       }
 
-      // Fallback
-      const storedProducts = localStorage.getItem("price_monitor_products");
-      const storedLogs = localStorage.getItem("price_monitor_logs");
-
-      if (storedProducts && storedLogs) {
-        const parsedProducts = JSON.parse(storedProducts);
-        const parsedLogs = JSON.parse(storedLogs);
-        setProducts(parsedProducts);
-        setPriceLogs(parsedLogs);
-        
-        // Sync local to DB
-        supabase.from("products").upsert(parsedProducts).then();
-        supabase.from("price_logs").upsert(parsedLogs).then();
-      } else {
-        // Seed initial data
-        setProducts(INITIAL_PRODUCTS);
-        const initialLogs = generateHistoricalLogs();
-        setPriceLogs(initialLogs);
-        localStorage.setItem("price_monitor_products", JSON.stringify(INITIAL_PRODUCTS));
-        localStorage.setItem("price_monitor_logs", JSON.stringify(initialLogs));
-        
-        supabase.from("products").upsert(INITIAL_PRODUCTS).then();
-        supabase.from("price_logs").upsert(initialLogs).then();
+      if (currentProducts.length === 0) {
+        const storedProducts = localStorage.getItem("price_monitor_products");
+        const storedLogs = localStorage.getItem("price_monitor_logs");
+        if (storedProducts && storedLogs) {
+          try {
+            currentProducts = JSON.parse(storedProducts);
+            currentLogs = JSON.parse(storedLogs);
+          } catch(e) {}
+        }
       }
+
+      if (currentProducts.length === 0) {
+        currentProducts = INITIAL_PRODUCTS;
+        currentLogs = generateHistoricalLogs();
+      }
+
+      // Automatically enrich products with seed keywords if missing
+      const seedLogs = generateHistoricalLogs();
+      const updatedProducts = currentProducts.map(p => {
+        const seedP = INITIAL_PRODUCTS.find(ip => ip.id === p.id || ip.name === p.name);
+        return {
+          ...p,
+          keywords: (p.keywords && p.keywords.some(k => k)) 
+            ? p.keywords 
+            : (seedP?.keywords || ["휘슬러압력밥솥부품", "휘슬러고무패킹", "휘슬러압력밥솥패킹"])
+        };
+      });
+
+      // Automatically enrich logs with seed keyword ranks and memos for 2026-07 if missing
+      const updatedLogs = [...currentLogs];
+      seedLogs.forEach(seed => {
+        const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
+        if (idx >= 0) {
+          const existing = updatedLogs[idx];
+          const hasKeywordRanks = existing.keywordRanks && existing.keywordRanks.some(r => r);
+          const hasCoupangRanks = existing.coupangKeywordRanks && existing.coupangKeywordRanks.some(r => r);
+          
+          updatedLogs[idx] = {
+            ...existing,
+            keywordRanks: hasKeywordRanks ? existing.keywordRanks : seed.keywordRanks,
+            coupangKeywordRanks: hasCoupangRanks ? existing.coupangKeywordRanks : seed.coupangKeywordRanks,
+            memo: existing.memo || seed.memo
+          };
+        } else {
+          updatedLogs.push(seed);
+        }
+      });
+
+      setProducts(updatedProducts);
+      setPriceLogs(updatedLogs);
+      localStorage.setItem("price_monitor_products", JSON.stringify(updatedProducts));
+      localStorage.setItem("price_monitor_logs", JSON.stringify(updatedLogs));
+      
+      try {
+        supabase.from("products").upsert(updatedProducts).then();
+        supabase.from("price_logs").upsert(updatedLogs).then();
+      } catch (e) {}
+
       setIsLoading(false);
     };
     
     initData();
   }, []);
+
+  // Force restore/reset keyword rank data for July 2026
+  const handleRestoreKeywordRankData = () => {
+    const seedLogs = generateHistoricalLogs();
+    
+    const updatedProducts = products.map(p => {
+      const seedP = INITIAL_PRODUCTS.find(ip => ip.id === p.id || ip.name === p.name);
+      return {
+        ...p,
+        keywords: seedP?.keywords || p.keywords || ["휘슬러압력밥솥부품", "휘슬러고무패킹", "휘슬러압력밥솥패킹"]
+      };
+    });
+
+    const updatedLogs = [...priceLogs];
+    seedLogs.forEach(seed => {
+      const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
+      if (idx >= 0) {
+        updatedLogs[idx] = {
+          ...updatedLogs[idx],
+          keywordRanks: seed.keywordRanks,
+          coupangKeywordRanks: seed.coupangKeywordRanks,
+          memo: seed.memo || updatedLogs[idx].memo
+        };
+      } else {
+        updatedLogs.push(seed);
+      }
+    });
+
+    saveToLocalStorage(updatedProducts, updatedLogs);
+    showToast("✅ 2026-07 전체 키워드 순위 및 메모 데이터가 복원되었습니다!");
+  };
 
   // Sync state changes with localStorage and Supabase
   const saveToLocalStorage = async (updatedProducts: Product[], updatedLogs: PriceLog[]) => {
@@ -1123,6 +1189,13 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                     <span className="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md font-bold">
                       선택된 품목: <span className="text-slate-800">{selectedProduct.name}</span>
                     </span>
+                    <button
+                      onClick={handleRestoreKeywordRankData}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md shadow-sm transition-all"
+                      title="2026-07 전체 키워드 순위 및 메모 기초 데이터 복원"
+                    >
+                      <RefreshCw size={13} /> 2026-07 순위 데이터 복원
+                    </button>
                   </div>
                 </div>
 
