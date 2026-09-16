@@ -1360,188 +1360,240 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
                   {/* Bottom: Trend Table */}
                   <div className="bg-white p-5 rounded-xl border border-slate-200 flex flex-col gap-4 shadow-sm overflow-hidden">
-                    {/* Naver Trend Table */}
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> 📈 {selectedDate.substring(0, 7)}월 네이버 키워드 순위 변동 추이</span>
-                    </div>
-                    
-                    <div className="overflow-x-auto rounded-lg border border-slate-100 h-full pb-2">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-500 border-b border-slate-100">
-                            <th className="p-3 font-bold whitespace-nowrap bg-slate-100 sticky left-0 z-10 border-r border-slate-200 min-w-[150px]">키워드</th>
-                            {(() => {
-                              const year = parseInt(selectedDate.substring(0, 4));
-                              const month = parseInt(selectedDate.substring(5, 7));
-                              const daysInMonth = new Date(year, month, 0).getDate();
-                              const dates = Array.from({ length: daysInMonth }).map((_, i) => 
-                                `${selectedDate.substring(0, 7)}-${(i + 1).toString().padStart(2, '0')}`
-                              );
-                              return dates.map(d => (
-                                <th key={d} className={`p-2 font-bold text-center whitespace-nowrap min-w-[50px] ${d === selectedDate ? 'bg-amber-100/50 text-amber-700' : ''}`}>
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[10px] opacity-70 font-normal">{d.substring(5, 7)}/</span>
-                                    <span>{d.substring(8, 10)}</span>
-                                  </div>
-                                </th>
-                              ));
-                            })()}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {Array.from({ length: 6 }).map((_, i) => {
-                            const kw = selectedProduct?.keywords?.[i];
-                            if (!kw) return null;
-                            const year = parseInt(selectedDate.substring(0, 4));
-                            const month = parseInt(selectedDate.substring(5, 7));
-                            const daysInMonth = new Date(year, month, 0).getDate();
-                            const dates = Array.from({ length: daysInMonth }).map((_, i) => 
-                              `${selectedDate.substring(0, 7)}-${(i + 1).toString().padStart(2, '0')}`
-                            );
-                            return (
-                              <tr key={i} className="hover:bg-slate-50/50">
-                                <td className="p-2.5 font-semibold text-emerald-800 min-w-[150px] max-w-[200px] truncate bg-emerald-50/30 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10" title={kw}>
-                                  {kw}
-                                </td>
-                                {dates.map(d => {
-                                  const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
-                                  const rank = log?.keywordRanks?.[i];
-                                  return (
-                                    <td key={d} className={`p-2 text-center border-r border-slate-50 ${d === selectedDate ? 'bg-amber-50/50' : ''}`}>
-                                      {rank ? <span className="text-emerald-600 font-bold text-[13px]">{rank}</span> : <span className="text-slate-200">-</span>}
-                                    </td>
-                                  )
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                      {(!selectedProduct?.keywords || !selectedProduct.keywords.some(k => k)) && (
-                        <div className="p-10 text-center text-xs text-slate-400">
-                          위에서 키워드를 입력하시면<br/>해당 월의 네이버 순위 변동 추이가 여기에 표시됩니다.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Coupang Trend Table */}
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2 mt-4">
-                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> 📈 {selectedDate.substring(0, 7)}월 쿠팡 키워드 순위 변동 추이</span>
-                    </div>
-                    
-                    <div className="overflow-x-auto rounded-lg border border-slate-100 h-full pb-2">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-500 border-b border-slate-100">
-                            <th className="p-3 font-bold whitespace-nowrap bg-slate-100 sticky left-0 z-10 border-r border-slate-200 min-w-[150px]">키워드</th>
-                            {(() => {
-                              const year = parseInt(selectedDate.substring(0, 4));
-                              const month = parseInt(selectedDate.substring(5, 7));
-                              const daysInMonth = new Date(year, month, 0).getDate();
-                              const dates = Array.from({ length: daysInMonth }).map((_, i) => 
-                                `${selectedDate.substring(0, 7)}-${(i + 1).toString().padStart(2, '0')}`
-                              );
-                              return dates.map(d => (
-                                <th key={d} className={`p-2 font-bold text-center whitespace-nowrap min-w-[50px] ${d === selectedDate ? 'bg-amber-100/50 text-amber-700' : ''}`}>
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[10px] opacity-70 font-normal">{d.substring(5, 7)}/</span>
-                                    <span>{d.substring(8, 10)}</span>
-                                  </div>
-                                </th>
-                              ));
-                            })()}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {Array.from({ length: 6 }).map((_, i) => {
-                            const kw = selectedProduct?.keywords?.[i];
-                            if (!kw) return null;
-                            const year = parseInt(selectedDate.substring(0, 4));
-                            const month = parseInt(selectedDate.substring(5, 7));
-                            const daysInMonth = new Date(year, month, 0).getDate();
-                            const dates = Array.from({ length: daysInMonth }).map((_, i) => 
-                              `${selectedDate.substring(0, 7)}-${(i + 1).toString().padStart(2, '0')}`
-                            );
-                            return (
-                              <tr key={i} className="hover:bg-slate-50/50">
-                                <td className="p-2.5 font-semibold text-blue-800 min-w-[150px] max-w-[200px] truncate bg-blue-50/30 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10" title={kw}>
-                                  {kw}
-                                </td>
-                                {dates.map(d => {
-                                  const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
-                                  const rank = log?.coupangKeywordRanks?.[i];
-                                  return (
-                                    <td key={d} className={`p-2 text-center border-r border-slate-50 ${d === selectedDate ? 'bg-amber-50/50' : ''}`}>
-                                      {rank ? <span className="text-blue-600 font-bold text-[13px]">{rank}</span> : <span className="text-slate-200">-</span>}
-                                    </td>
-                                  )
-                                })}
-                              </tr>
-                            );
-                          })}
-                          {(() => {
-                            const year = parseInt(selectedDate.substring(0, 4));
-                            const month = parseInt(selectedDate.substring(5, 7));
-                            const daysInMonth = new Date(year, month, 0).getDate();
-                            const dates = Array.from({ length: daysInMonth }).map((_, i) => 
-                              `${selectedDate.substring(0, 7)}-${(i + 1).toString().padStart(2, '0')}`
-                            );
-                            return (
-                              <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t-2 border-slate-100">
-                                <td className="p-2.5 font-bold text-amber-800 min-w-[150px] max-w-[200px] truncate bg-amber-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
-                                  <span>📝</span> 일일 특이사항 (메모)
-                                </td>
-                                {dates.map(d => {
-                                  const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
-                                  const memo = log?.memo || "";
-                                  return (
-                                    <td key={`memo-${d}`} className={`p-1 text-center border-r border-amber-100/30 ${d === selectedDate ? 'bg-amber-100/60' : ''}`}>
-                                      <input
-                                        type="text"
-                                        value={memo}
-                                        onChange={(e) => handleMemoChange(selectedProductId, d, e.target.value)}
-                                        placeholder="메모"
-                                        className="w-full min-w-[40px] text-[11px] px-1 py-1.5 outline-none text-amber-900 bg-transparent text-center focus:bg-white focus:ring-1 focus:ring-amber-400 rounded transition-all placeholder-amber-900/20 font-medium"
-                                        title={memo}
-                                      />
-                                    </td>
-                                  )
-                                })}
-                              </tr>
-                            );
-                          })()}
-                        </tbody>
-                      </table>
-                      {(!selectedProduct?.keywords || !selectedProduct.keywords.some(k => k)) && (
-                        <div className="p-10 text-center text-xs text-slate-400">
-                          위에서 키워드를 입력하시면<br/>해당 월의 쿠팡 순위 변동 추이가 여기에 표시됩니다.
-                        </div>
-                      )}
-                    </div>
-                    {/* Monthly Memo Summary */}
                     {(() => {
-                      const currentMonth = selectedDate.substring(0, 7);
-                      const logsWithMemos = priceLogs.filter(l => l.productId === selectedProductId && l.date.startsWith(currentMonth) && l.memo && l.memo.trim() !== "");
+                      const year = parseInt(selectedDate.substring(0, 4)) || 2026;
+                      const month = parseInt(selectedDate.substring(5, 7)) || 7;
+
+                      const prevMonth = month === 1 ? 12 : month - 1;
+                      const prevYear = month === 1 ? year - 1 : year;
+
+                      const prevDays = new Date(prevYear, prevMonth, 0).getDate();
+                      const currentDays = new Date(year, month, 0).getDate();
+
+                      const prevMonthStr = prevMonth.toString().padStart(2, '0');
+                      const currentMonthStr = month.toString().padStart(2, '0');
+
+                      const prevDates = Array.from({ length: prevDays }).map((_, i) => 
+                        `${prevYear}-${prevMonthStr}-${(i + 1).toString().padStart(2, '0')}`
+                      );
                       
-                      if (logsWithMemos.length === 0) return null;
-                      
+                      const currentDates = Array.from({ length: currentDays }).map((_, i) => 
+                        `${year}-${currentMonthStr}-${(i + 1).toString().padStart(2, '0')}`
+                      );
+
+                      const twoMonthDates = [...prevDates, ...currentDates];
+                      const rangeLabel = `${prevYear}-${prevMonthStr} ~ ${year}-${currentMonthStr}`;
+
+                      const logsWithMemos = priceLogs.filter(l => 
+                        l.productId === selectedProductId && 
+                        twoMonthDates.includes(l.date) && 
+                        l.memo && l.memo.trim() !== ""
+                      );
+
                       return (
-                        <div className="mt-3 bg-amber-50/60 rounded-xl p-3 border border-amber-200/50 shadow-[inset_0_2px_10px_rgba(245,158,11,0.05)]">
-                          <div className="flex items-center gap-1.5 mb-2.5">
-                            <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                              {currentMonth}
+                        <>
+                          {/* Naver Trend Table */}
+                          <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> 
+                              📈 네이버 키워드 순위 변동 추이 ({prevMonth}월 ~ {month}월)
                             </span>
-                            <h4 className="text-xs font-bold text-slate-700">월간 특이사항 모아보기</h4>
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1 shadow-2xs">
+                              👉 좌우 스크롤로 전월 1일 ~ 당월 말일 순위 확인 가능 👈
+                            </span>
                           </div>
-                          <ul className="flex flex-col gap-1.5 pl-1">
-                            {logsWithMemos.sort((a, b) => a.date.localeCompare(b.date)).map(log => (
-                              <li key={`summary-${log.date}`} className="text-[11px] flex items-start gap-2 text-slate-600 bg-white/60 p-1.5 rounded-lg border border-white">
-                                <span className="font-bold text-amber-700 bg-amber-100/50 px-1.5 py-0.5 rounded shrink-0 leading-none mt-0.5">{log.date.substring(5)}</span>
-                                <span className="leading-relaxed break-words pt-0.5">{log.memo}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                          
+                          <div className="overflow-x-auto rounded-lg border border-slate-100 h-full pb-2">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                  <th className="p-3 font-bold whitespace-nowrap bg-slate-100 sticky left-0 z-10 border-r border-slate-200 min-w-[150px]">키워드</th>
+                                  {twoMonthDates.map(d => (
+                                    <th key={d} className={`p-2 font-bold text-center whitespace-nowrap min-w-[50px] ${d === selectedDate ? 'bg-amber-100/50 text-amber-700' : ''}`}>
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] opacity-70 font-normal">{d.substring(5, 7)}/</span>
+                                        <span>{d.substring(8, 10)}</span>
+                                      </div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {Array.from({ length: 6 }).map((_, i) => {
+                                  const kw = selectedProduct?.keywords?.[i];
+                                  if (!kw) return null;
+                                  return (
+                                    <tr key={i} className="hover:bg-slate-50/50">
+                                      <td className="p-2.5 font-semibold text-emerald-800 min-w-[150px] max-w-[200px] truncate bg-emerald-50/30 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10" title={kw}>
+                                        {kw}
+                                      </td>
+                                      {twoMonthDates.map(d => {
+                                        const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                        const rank = log?.keywordRanks?.[i];
+                                        return (
+                                          <td key={d} className={`p-2 text-center border-r border-slate-50 ${d === selectedDate ? 'bg-amber-50/50' : ''}`}>
+                                            {rank ? <span className="text-emerald-600 font-bold text-[13px]">{rank}</span> : <span className="text-slate-200">-</span>}
+                                          </td>
+                                        )
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t-2 border-slate-100">
+                                  <td className="p-2.5 font-bold text-amber-800 min-w-[150px] max-w-[200px] truncate bg-amber-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
+                                    <span>📝</span> 일일 특이사항 (메모)
+                                  </td>
+                                  {twoMonthDates.map(d => {
+                                    const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                    const memo = log?.memo || "";
+                                    return (
+                                      <td key={`memo-naver-${d}`} className={`p-1 text-center border-r border-amber-100/30 ${d === selectedDate ? 'bg-amber-100/60' : ''}`}>
+                                        <input
+                                          type="text"
+                                          value={memo}
+                                          onChange={(e) => handleMemoChange(selectedProductId, d, e.target.value)}
+                                          placeholder="메모"
+                                          className="w-full min-w-[40px] text-[11px] px-1 py-1.5 outline-none text-amber-900 bg-transparent text-center focus:bg-white focus:ring-1 focus:ring-amber-400 rounded transition-all placeholder-amber-900/20 font-medium"
+                                          title={memo}
+                                        />
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              </tbody>
+                            </table>
+                            {(!selectedProduct?.keywords || !selectedProduct.keywords.some(k => k)) && (
+                              <div className="p-10 text-center text-xs text-slate-400">
+                                위에서 키워드를 입력하시면<br/>해당 월의 네이버 순위 변동 추이가 여기에 표시됩니다.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Naver Memo Summary Card */}
+                          {logsWithMemos.length > 0 && (
+                            <div className="mt-1 bg-amber-50/70 rounded-xl p-3.5 border border-amber-200/70 shadow-xs">
+                              <div className="flex items-center gap-2 mb-2.5">
+                                <span className="bg-amber-100 text-amber-900 text-[11px] font-bold px-2 py-0.5 rounded shadow-2xs">
+                                  {rangeLabel}
+                                </span>
+                                <h4 className="text-xs font-bold text-slate-800">
+                                  전월/당월 특이사항 모아보기
+                                </h4>
+                              </div>
+                              <div className="flex flex-col gap-1.5 pl-1">
+                                {logsWithMemos.sort((a, b) => a.date.localeCompare(b.date)).map(log => (
+                                  <div key={`memo-summary-naver-${log.date}`} className="text-xs flex items-center gap-2.5 bg-white p-2 rounded-lg border border-amber-100/80 shadow-2xs">
+                                    <span className="font-bold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded text-[11px] shrink-0">
+                                      {log.date.substring(5)}
+                                    </span>
+                                    <span className="text-slate-700 font-medium break-all">{log.memo}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Coupang Trend Table */}
+                          <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2 mt-6">
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> 
+                              📈 쿠팡 키워드 순위 변동 추이 ({prevMonth}월 ~ {month}월)
+                            </span>
+                            <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full flex items-center gap-1 shadow-2xs">
+                              👉 좌우 스크롤로 전월 1일 ~ 당월 말일 순위 확인 가능 👈
+                            </span>
+                          </div>
+                          
+                          <div className="overflow-x-auto rounded-lg border border-slate-100 h-full pb-2">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                  <th className="p-3 font-bold whitespace-nowrap bg-slate-100 sticky left-0 z-10 border-r border-slate-200 min-w-[150px]">키워드</th>
+                                  {twoMonthDates.map(d => (
+                                    <th key={d} className={`p-2 font-bold text-center whitespace-nowrap min-w-[50px] ${d === selectedDate ? 'bg-amber-100/50 text-amber-700' : ''}`}>
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] opacity-70 font-normal">{d.substring(5, 7)}/</span>
+                                        <span>{d.substring(8, 10)}</span>
+                                      </div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {Array.from({ length: 6 }).map((_, i) => {
+                                  const kw = selectedProduct?.keywords?.[i];
+                                  if (!kw) return null;
+                                  return (
+                                    <tr key={i} className="hover:bg-slate-50/50">
+                                      <td className="p-2.5 font-semibold text-blue-800 min-w-[150px] max-w-[200px] truncate bg-blue-50/30 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10" title={kw}>
+                                        {kw}
+                                      </td>
+                                      {twoMonthDates.map(d => {
+                                        const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                        const rank = log?.coupangKeywordRanks?.[i];
+                                        return (
+                                          <td key={d} className={`p-2 text-center border-r border-slate-50 ${d === selectedDate ? 'bg-amber-50/50' : ''}`}>
+                                            {rank ? <span className="text-blue-600 font-bold text-[13px]">{rank}</span> : <span className="text-slate-200">-</span>}
+                                          </td>
+                                        )
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t-2 border-slate-100">
+                                  <td className="p-2.5 font-bold text-amber-800 min-w-[150px] max-w-[200px] truncate bg-amber-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
+                                    <span>📝</span> 일일 특이사항 (메모)
+                                  </td>
+                                  {twoMonthDates.map(d => {
+                                    const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                    const memo = log?.memo || "";
+                                    return (
+                                      <td key={`memo-coupang-${d}`} className={`p-1 text-center border-r border-amber-100/30 ${d === selectedDate ? 'bg-amber-100/60' : ''}`}>
+                                        <input
+                                          type="text"
+                                          value={memo}
+                                          onChange={(e) => handleMemoChange(selectedProductId, d, e.target.value)}
+                                          placeholder="메모"
+                                          className="w-full min-w-[40px] text-[11px] px-1 py-1.5 outline-none text-amber-900 bg-transparent text-center focus:bg-white focus:ring-1 focus:ring-amber-400 rounded transition-all placeholder-amber-900/20 font-medium"
+                                          title={memo}
+                                        />
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              </tbody>
+                            </table>
+                            {(!selectedProduct?.keywords || !selectedProduct.keywords.some(k => k)) && (
+                              <div className="p-10 text-center text-xs text-slate-400">
+                                위에서 키워드를 입력하시면<br/>해당 월의 쿠팡 순위 변동 추이가 여기에 표시됩니다.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Coupang Memo Summary Card */}
+                          {logsWithMemos.length > 0 && (
+                            <div className="mt-1 bg-amber-50/70 rounded-xl p-3.5 border border-amber-200/70 shadow-xs">
+                              <div className="flex items-center gap-2 mb-2.5">
+                                <span className="bg-amber-100 text-amber-900 text-[11px] font-bold px-2 py-0.5 rounded shadow-2xs">
+                                  {rangeLabel}
+                                </span>
+                                <h4 className="text-xs font-bold text-slate-800">
+                                  전월/당월 특이사항 모아보기
+                                </h4>
+                              </div>
+                              <div className="flex flex-col gap-1.5 pl-1">
+                                {logsWithMemos.sort((a, b) => a.date.localeCompare(b.date)).map(log => (
+                                  <div key={`memo-summary-coupang-${log.date}`} className="text-xs flex items-center gap-2.5 bg-white p-2 rounded-lg border border-amber-100/80 shadow-2xs">
+                                    <span className="font-bold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded text-[11px] shrink-0">
+                                      {log.date.substring(5)}
+                                    </span>
+                                    <span className="text-slate-700 font-medium break-all">{log.memo}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       );
                     })()}
                   </div>

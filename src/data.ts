@@ -95,8 +95,15 @@ const TODAY_PRICES: Record<string, {
 export function generateHistoricalLogs(): PriceLog[] {
   const logs: PriceLog[] = [];
   
-  // Generate full dates for July 2026 (2026-07-01 to 2026-07-31)
+  // Generate dates for June and July 2026 (2026-06-01 ~ 2026-07-31)
   const dates: string[] = [];
+  
+  // June (30 days)
+  for (let day = 1; day <= 30; day++) {
+    const dayStr = day.toString().padStart(2, "0");
+    dates.push(`2026-06-${dayStr}`);
+  }
+  // July (31 days)
   for (let day = 1; day <= 31; day++) {
     const dayStr = day.toString().padStart(2, "0");
     dates.push(`2026-07-${dayStr}`);
@@ -104,22 +111,23 @@ export function generateHistoricalLogs(): PriceLog[] {
 
   // Sample memos map
   const sampleMemos: Record<string, string> = {
+    "2026-06-12": "신규 키워드 광고 세팅",
+    "2026-06-25": "패킹 상품 썸네일 교체",
     "2026-07-02": "네이버 쇼핑 검색광고 개시",
     "2026-07-05": "네이버 쇼핑 메인 상단 노출",
     "2026-07-10": "쿠팡 타임딜 할인 행사 진행",
     "2026-07-15": "네이버 1위 상단 굳히기",
-    "2026-07-20": "경쟁사 프로모션 영향 가격 조정",
-    "2026-07-25": "키워드 광고 효율 상승",
-    "2026-07-30": "월말 재고 소진 프로모션"
+    "2026-07-21": "상품명수정",
+    "2026-07-30": "클릭단가 350원으로인상"
   };
 
   INITIAL_PRODUCTS.forEach((p, pIdx) => {
     const todayData = TODAY_PRICES[p.id];
     if (!todayData) return;
 
-    dates.forEach((date, dayIdx) => {
-      const dayNum = dayIdx + 1;
-      const diffMultiplier = 1 + (dayNum - 10) * 0.005;
+    dates.forEach((date, index) => {
+      const dayNum = index + 1;
+      const diffMultiplier = 1 + (dayNum - 20) * 0.003;
       let navPrice = Math.round((todayData.naverPrice * diffMultiplier) / 10) * 10;
       let coupPrice = todayData.coupangPrice > 0 
         ? Math.round((todayData.coupangPrice * (diffMultiplier + (p.id === "prod-3" ? 0.02 : -0.005))) / 10) * 10
