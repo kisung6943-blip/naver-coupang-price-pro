@@ -403,12 +403,14 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       }
     }
 
-    const naverPrice = parsePrice(baseLog.naverPrice);
-    const naverShipping = parsePrice(baseLog.naverShipping);
+    const isSelected = prod.id === selectedProductId;
+
+    const naverPrice = isSelected ? parsePrice(editNaverPrice) : parsePrice(baseLog.naverPrice);
+    const naverShipping = isSelected ? parsePrice(editNaverShipping) : parsePrice(baseLog.naverShipping);
     const naverTotal = naverPrice > 0 ? (naverPrice + naverShipping) : 0;
 
-    const coupangPrice = parsePrice(baseLog.coupangPrice);
-    const coupangShipping = parsePrice(baseLog.coupangShipping);
+    const coupangPrice = isSelected ? parsePrice(editCoupangPrice) : parsePrice(baseLog.coupangPrice);
+    const coupangShipping = isSelected ? parsePrice(editCoupangShipping) : parsePrice(baseLog.coupangShipping);
     const coupangTotal = coupangPrice > 0 ? (coupangPrice + coupangShipping) : 0;
 
     const difference = (naverTotal > 0 && coupangTotal > 0)
@@ -426,7 +428,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       naverPrice,
       naverShipping,
       naverTotal,
-      coupangSeller: baseLog.coupangSeller || "",
+      coupangSeller: isSelected ? editCoupangSeller : (baseLog.coupangSeller || ""),
       coupangPrice,
       coupangShipping,
       coupangTotal,
@@ -485,6 +487,8 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
   // Handle saving prices manually
   const handleSavePrice = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedProductId) return;
+
     const navPrice = parsePrice(editNaverPrice);
     const navShip = parsePrice(editNaverShipping);
     const coupPrice = parsePrice(editCoupangPrice);
@@ -494,12 +498,15 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     const coupangTotal = coupPrice > 0 ? (coupPrice + coupShip) : 0;
     const difference = (naverTotal > 0 && coupangTotal > 0) ? (naverTotal - coupangTotal) : 0;
 
+    const baseLog = getOrCreateLogForDate(selectedProductId, selectedDate);
+
     const existingLogIndex = priceLogs.findIndex(
       (log) => log.productId === selectedProductId && log.date === selectedDate
     );
 
     const updatedLogs = [...priceLogs];
     const newLog: PriceLog = {
+      ...baseLog,
       id: `log-${selectedProductId}-${selectedDate}`,
       date: selectedDate,
       productId: selectedProductId,
@@ -511,9 +518,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       coupangShipping: coupShip,
       coupangTotal,
       difference,
-      keywordRanks: existingLogIndex >= 0 ? priceLogs[existingLogIndex].keywordRanks : [],
-      coupangKeywordRanks: existingLogIndex >= 0 ? priceLogs[existingLogIndex].coupangKeywordRanks : [],
-      memo: existingLogIndex >= 0 ? priceLogs[existingLogIndex].memo : "",
+      keywordRanks: baseLog.keywordRanks || [],
+      coupangKeywordRanks: baseLog.coupangKeywordRanks || [],
+      memo: baseLog.memo || "",
     };
 
     if (existingLogIndex >= 0) {
@@ -523,7 +530,8 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     }
 
     saveToLocalStorage(products, updatedLogs);
-    showToast("가격 모니터링 로그가 저장되었습니다.");
+    const prod = products.find(p => p.id === selectedProductId);
+    showToast(`✅ [${prod?.name || ''}] ${selectedDate} 날짜의 가격 정보가 저장되었습니다!`);
   };
 
   const handleKeywordNameChange = (productId: string, index: number, value: string) => {
@@ -1889,14 +1897,24 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                         </div>
                       </div>
 
+                      {/* Real-time total preview badges */}
+                      <div className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-200 font-semibold shadow-2xs mt-1">
+                        <span className="text-amber-800">
+                          네이버 합계: <span className="font-bold text-amber-950">{((parsePrice(editNaverPrice) > 0 ? parsePrice(editNaverPrice) + parsePrice(editNaverShipping) : 0)).toLocaleString()}원</span>
+                        </span>
+                        <span className="text-blue-800">
+                          쿠팡 합계: <span className="font-bold text-blue-950">{((parsePrice(editCoupangPrice) > 0 ? parsePrice(editCoupangPrice) + parsePrice(editCoupangShipping) : 0)).toLocaleString()}원</span>
+                        </span>
+                      </div>
+
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 px-4 rounded-xl text-xs transition-colors shadow-xs"
+                      className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-4 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5"
                       id="btn-save-price-form"
                     >
-                      {selectedDate} 날짜의 가격 저장하기
+                      <span>💾</span> {selectedDate} 날짜의 가격 저장하기
                     </button>
                   </form>
 
