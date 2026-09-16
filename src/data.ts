@@ -41,7 +41,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "NHB 깨그라인더 양념통 70ml",
     naverUrl: "https://search.shopping.naver.com/search/all?query=NHB+깨그라인더",
     coupangUrl: "https://www.coupang.com/np/search?component=&q=NHB+깨그라인더",
-    keywords: ["깨갈이", "깨그라인더", "양념통"]
+    keywords: ["조리도구거치대", "조리도구걸이", "조리도구정리", "주방조리도구걸이", "주방조리기구걸이"]
   },
   {
     id: "prod-7",
@@ -180,10 +180,40 @@ export function generateHistoricalLogs(): PriceLog[] {
       const coupangTotal = coupPrice > 0 ? (coupPrice + coupShip) : 0;
       const difference = (naverTotal > 0 && coupangTotal > 0) ? (naverTotal - coupangTotal) : 0;
 
-      // Deterministic sample rank patterns for Naver & Coupang keywords
-      const naverRank1 = (1 + ((dayNum + pIdx) % 3)).toString();
-      const naverRank2 = (1 + ((dayNum * 2 + pIdx) % 4)).toString();
-      const naverRank3 = (1 + ((dayNum + pIdx * 3) % 2)).toString();
+      // Special sample ranks for prod-6 (NHB 깨그라인더 양념통 70ml)
+      let naverRank1 = (1 + ((dayNum + pIdx) % 3)).toString();
+      let naverRank2 = (1 + ((dayNum * 2 + pIdx) % 4)).toString();
+      let naverRank3 = (1 + ((dayNum + pIdx * 3) % 2)).toString();
+      let naverRank4 = "";
+      let naverRank5 = "";
+
+      if (p.id === "prod-6") {
+        if (date === "2026-08-30" || date === "2026-07-30") {
+          naverRank1 = "21";
+          naverRank2 = "";
+          naverRank3 = "27";
+          naverRank4 = "19";
+          naverRank5 = "";
+        } else if (date === "2026-09-01") {
+          naverRank1 = "199";
+          naverRank2 = "9";
+          naverRank3 = "";
+          naverRank4 = "";
+          naverRank5 = "";
+        } else if (date === "2026-08-23") {
+          naverRank1 = "59";
+          naverRank2 = "";
+          naverRank3 = "";
+          naverRank4 = "";
+          naverRank5 = "";
+        } else if (date === "2026-08-27") {
+          naverRank1 = "";
+          naverRank2 = "25";
+          naverRank3 = "";
+          naverRank4 = "";
+          naverRank5 = "";
+        }
+      }
 
       const coupangRank1 = (1 + ((dayNum * 3 + pIdx) % 4)).toString();
       const coupangRank2 = (1 + ((dayNum + pIdx * 2) % 3)).toString();
@@ -201,9 +231,11 @@ export function generateHistoricalLogs(): PriceLog[] {
         coupangShipping: coupShip,
         coupangTotal,
         difference,
-        keywordRanks: [naverRank1, naverRank2, naverRank3],
+        keywordRanks: p.id === "prod-6" 
+          ? [naverRank1, naverRank2, naverRank3, naverRank4, naverRank5] 
+          : [naverRank1, naverRank2, naverRank3],
         coupangKeywordRanks: [coupangRank1, coupangRank2, coupangRank3],
-        memo: p.id === "prod-6" || p.id === "prod-1" ? (sampleMemos[date] || "") : ""
+        memo: (p.id === "prod-6" || p.id === "prod-1") ? (sampleMemos[date] || "") : ""
       });
     });
   });

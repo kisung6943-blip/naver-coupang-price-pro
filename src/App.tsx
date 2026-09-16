@@ -21,12 +21,12 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
   // UI filter states
-  const [selectedDate, setSelectedDate] = useState<string>("2026-07-10");
+  const [selectedDate, setSelectedDate] = useState<string>("2026-09-16");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("all"); // all, naver_cheaper, coupang_cheaper, same, no_coupang
   
   // Selected product for chart and quick logging
-  const [selectedProductId, setSelectedProductId] = useState<string>("prod-1");
+  const [selectedProductId, setSelectedProductId] = useState<string>("prod-6");
   
   // AI Parsing states
   const [aiInputText, setAiInputText] = useState<string>("");
@@ -273,7 +273,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     });
 
     saveToLocalStorage(updatedProducts, updatedLogs);
-    showToast("✅ 2026-07 전체 키워드 순위 및 메모 데이터가 복원되었습니다!");
+    showToast("✅ 8~9월 전체 키워드 순위 및 메모 데이터가 복원되었습니다!");
   };
 
   // Sync state changes with localStorage and Supabase
@@ -1200,9 +1200,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                     <button
                       onClick={handleRestoreKeywordRankData}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md shadow-sm transition-all"
-                      title="2026-07 전체 키워드 순위 및 메모 기초 데이터 복원"
+                      title="8~9월 전체 키워드 순위 및 메모 기초 데이터 복원"
                     >
-                      <RefreshCw size={13} /> 2026-07 순위 데이터 복원
+                      <RefreshCw size={13} /> 8~9월 순위 데이터 복원
                     </button>
                   </div>
                 </div>
