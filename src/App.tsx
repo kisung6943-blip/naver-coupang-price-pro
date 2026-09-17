@@ -290,17 +290,21 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
   // Restore real entered keyword ranks (e.g. 21위, 199위, 59위, 25위)
   const handleRestoreRealRanks = () => {
-    const seedLogs = generateHistoricalLogs();
-    const updatedLogs = priceLogs.map(existing => {
-      const seed = seedLogs.find(s => s.productId === existing.productId && s.date === existing.date);
-      if (seed && seed.keywordRanks && seed.keywordRanks.some(r => r)) {
-        return {
-          ...existing,
+    const seedLogs = generateHistoricalLogs(products);
+    const updatedLogs = [...priceLogs];
+
+    seedLogs.forEach(seed => {
+      const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
+      if (idx >= 0) {
+        updatedLogs[idx] = {
+          ...updatedLogs[idx],
           keywordRanks: seed.keywordRanks,
           coupangKeywordRanks: seed.coupangKeywordRanks,
+          memo: updatedLogs[idx].memo || seed.memo
         };
+      } else {
+        updatedLogs.push(seed);
       }
-      return existing;
     });
 
     saveToLocalStorage(products, updatedLogs);

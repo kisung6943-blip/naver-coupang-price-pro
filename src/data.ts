@@ -124,7 +124,7 @@ const TODAY_PRICES: Record<string, {
   "prod-14": { naverPrice: 5890, naverShipping: 3000, coupangSeller: "휘슬러as", coupangPrice: 5900, coupangShipping: 3000 }
 };
 
-export function generateHistoricalLogs(): PriceLog[] {
+export function generateHistoricalLogs(currentProducts: Product[] = INITIAL_PRODUCTS): PriceLog[] {
   const logs: PriceLog[] = [];
   
   // Generate dates for June, July, August, September 2026
@@ -145,8 +145,8 @@ export function generateHistoricalLogs(): PriceLog[] {
     const dayStr = day.toString().padStart(2, "0");
     dates.push(`2026-08-${dayStr}`);
   }
-  // September (16 days)
-  for (let day = 1; day <= 16; day++) {
+  // September (30 days)
+  for (let day = 1; day <= 30; day++) {
     const dayStr = day.toString().padStart(2, "0");
     dates.push(`2026-09-${dayStr}`);
   }
@@ -161,13 +161,13 @@ export function generateHistoricalLogs(): PriceLog[] {
     "2026-07-15": "네이버 1위 상단 굳히기",
     "2026-07-21": "상품명수정",
     "2026-07-30": "클릭단가 350원으로인상",
+    "2026-08-15": "상품명수정",
     "2026-08-21": "상품명수정",
     "2026-08-30": "클릭단가 350원으로인상"
   };
 
-  INITIAL_PRODUCTS.forEach((p, pIdx) => {
-    const todayData = TODAY_PRICES[p.id];
-    if (!todayData) return;
+  currentProducts.forEach((p, pIdx) => {
+    const todayData = TODAY_PRICES[p.id] || { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 };
 
     dates.forEach((date, index) => {
       const dayNum = index + 1;
@@ -220,7 +220,7 @@ export function generateHistoricalLogs(): PriceLog[] {
         difference,
         keywordRanks: naverRanks,
         coupangKeywordRanks: coupangRanks,
-        memo: (p.id === "prod-6" || p.id === "prod-1") ? (sampleMemos[date] || "") : ""
+        memo: sampleMemos[date] || ""
       });
     });
   });
