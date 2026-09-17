@@ -194,35 +194,23 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Initialize data from Supabase, fallback to LocalStorage or seed data
+  // Initialize data from LocalStorage instantly, fallback to seed data, sync Supabase non-blocking
   useEffect(() => {
-    const initData = async () => {
+    const initData = () => {
       let currentProducts: Product[] = [];
       let currentLogs: PriceLog[] = [];
 
-      try {
-        const { data: prodData, error: prodErr } = await supabase.from("products").select("*");
-        const { data: logData, error: logErr } = await supabase.from("price_logs").select("*");
-        
-        if (!prodErr && prodData && prodData.length > 0) {
-          currentProducts = prodData;
-          currentLogs = logData || [];
-        }
-      } catch (err) {
-        console.error("Supabase load error:", err);
+      // 1. Instantly load from LocalStorage synchronously
+      const storedProducts = localStorage.getItem("price_monitor_products");
+      const storedLogs = localStorage.getItem("price_monitor_logs");
+      if (storedProducts && storedLogs) {
+        try {
+          currentProducts = JSON.parse(storedProducts);
+          currentLogs = JSON.parse(storedLogs);
+        } catch (e) {}
       }
 
-      if (currentProducts.length === 0) {
-        const storedProducts = localStorage.getItem("price_monitor_products");
-        const storedLogs = localStorage.getItem("price_monitor_logs");
-        if (storedProducts && storedLogs) {
-          try {
-            currentProducts = JSON.parse(storedProducts);
-            currentLogs = JSON.parse(storedLogs);
-          } catch(e) {}
-        }
-      }
-
+      // 2. Fallback to INITIAL_PRODUCTS if LocalStorage is empty
       if (currentProducts.length === 0) {
         currentProducts = INITIAL_PRODUCTS;
         currentLogs = generateHistoricalLogs();
@@ -243,83 +231,110 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       // Automatically enrich logs with seed keyword ranks and memos for 2026-07 if missing
       const updatedLogs = [...currentLogs];
       seedLogs.forEach(seed => {
-        const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
-        if (idx >= 0) {
-          const existing = updatedLogs[idx];
-          const hasKeywordRanks = existing.keywordRanks && existing.keywordRanks.some(r => r);
-          const hasCoupangRanks = existing.coupangKeywordRanks && existing.coupangKeywordRanks.some(r => r);
-          
-          updatedLogs[idx] = {
-            ...existing,
-            keywordRanks: hasKeywordRanks ? existing.keywordRanks : seed.keywordRanks,
-            coupangKeywordRanks: hasCoupangRanks ? existing.coupangKeywordRanks : seed.coupangKeywordRanks,
-            memo: existing.memo || seed.memo
-          };
-        } else {
-          updatedLogs.push(seed);
+        if (updatedProducts.some(p => p.id === seed.productId)) {
+          const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
+          if (idx >= 0) {
+            const existing = updatedLogs[idx];
+            const hasKeywordRanks = existing.keywordRanks && existing.keywordRanks.some(r => r);
+            const hasCoupangRanks = existing.coupangKeywordRanks && existing.coupangKeywordRanks.some(r => r);
+            
+            updatedLogs[idx] = {
+              ...existing,
+              keywordRanks: hasKeywordRanks ? existing.keywordRanks : seed.keywordRanks,
+              coupangKeywordRanks: hasCoupangRanks ? existing.coupangKeywordRanks : seed.coupangKeywordRanks,
+              memo: existing.memo || seed.memo
+            };
+          } else {
+            updatedLogs.push(seed);
+          }
         }
       });
 
+      // Set state and render INSTANTLY!
       setProducts(updatedProducts);
       setPriceLogs(updatedLogs);
       localStorage.setItem("price_monitor_products", JSON.stringify(updatedProducts));
       localStorage.setItem("price_monitor_logs", JSON.stringify(updatedLogs));
-      
-      try {
-        supabase.from("products").upsert(updatedProducts).then();
-        supabase.from("price_logs").upsert(updatedLogs).then();
-      } catch (e) {}
-
       setIsLoading(false);
+
+      // 3. Background non-blocking sync with Supabase (with 1.5s timeout)
+      const syncSupabase = async () => {
+        try {
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Supabase timeout")), 1500)
+          );
+          
+          const fetchPromise = Promise.all([
+            supabase.from("products").select("*"),
+            supabase.from("price_logs").select("*")
+          ]);
+
+          const [prodRes, logRes]: any = await Promise.race([fetchPromise, timeoutPromise]);
+          
+          if (prodRes?.data && prodRes.data.length > 0) {
+            setProducts(prodRes.data);
+            if (logRes?.data) setPriceLogs(logRes.data);
+            localStorage.setItem("price_monitor_products", JSON.stringify(prodRes.data));
+            if (logRes?.data) localStorage.setItem("price_monitor_logs", JSON.stringify(logRes.data));
+          }
+        } catch (err) {
+          // Supabase timeout or network error - local data is already rendered instantly
+        }
+      };
+
+      syncSupabase();
     };
     
     initData();
   }, []);
 
-  // Force restore/reset keyword rank data for July 2026
-  const handleRestoreKeywordRankData = () => {
+  // Restore real entered keyword ranks (e.g. 21위, 199위, 59위, 25위)
+  const handleRestoreRealRanks = () => {
     const seedLogs = generateHistoricalLogs();
-    
-    const updatedProducts = products.map(p => {
-      const seedP = INITIAL_PRODUCTS.find(ip => ip.id === p.id || ip.name === p.name);
-      return {
-        ...p,
-        keywords: seedP?.keywords || p.keywords || ["휘슬러압력밥솥부품", "휘슬러고무패킹", "휘슬러압력밥솥패킹"]
-      };
-    });
-
-    const updatedLogs = [...priceLogs];
-    seedLogs.forEach(seed => {
-      const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
-      if (idx >= 0) {
-        updatedLogs[idx] = {
-          ...updatedLogs[idx],
+    const updatedLogs = priceLogs.map(existing => {
+      const seed = seedLogs.find(s => s.productId === existing.productId && s.date === existing.date);
+      if (seed && seed.keywordRanks && seed.keywordRanks.some(r => r)) {
+        return {
+          ...existing,
           keywordRanks: seed.keywordRanks,
           coupangKeywordRanks: seed.coupangKeywordRanks,
-          memo: seed.memo || updatedLogs[idx].memo
         };
-      } else {
-        updatedLogs.push(seed);
       }
+      return existing;
     });
 
-    saveToLocalStorage(updatedProducts, updatedLogs);
-    showToast("✅ 8~9월 전체 키워드 순위 및 메모 데이터가 복원되었습니다!");
+    saveToLocalStorage(products, updatedLogs);
+    showToast("✅ 실제 기록되어 있던 키워드 순위(21위, 199위, 59위, 25위 등)가 성공적으로 복원되었습니다!");
   };
 
-  // Sync state changes with localStorage and Supabase
-  const saveToLocalStorage = async (updatedProducts: Product[], updatedLogs: PriceLog[]) => {
+  // Clear fake/dummy sample ranks with confirmation
+  const handleClearDummyRanks = () => {
+    if (confirm("등록하신 품목, 쇼핑몰 링크, 판매가, 배송비, 메모는 전혀 삭제되지 않고 안전하게 유지됩니다.\n\n예시용으로 자동 채워져 있던 샘플 키워드 순위 숫자만 지우시겠습니까?")) {
+      const updatedLogs = priceLogs.map(l => ({
+        ...l,
+        keywordRanks: [],
+        coupangKeywordRanks: []
+      }));
+      saveToLocalStorage(products, updatedLogs);
+      showToast("🧹 샘플 키워드 순위만 초기화되었습니다. 품목 및 가격 데이터는 완벽히 보존됩니다!");
+    }
+  };
+
+  // Sync state changes with localStorage and Supabase (non-blocking)
+  const saveToLocalStorage = (updatedProducts: Product[], updatedLogs: PriceLog[]) => {
     setProducts(updatedProducts);
     setPriceLogs(updatedLogs);
     localStorage.setItem("price_monitor_products", JSON.stringify(updatedProducts));
     localStorage.setItem("price_monitor_logs", JSON.stringify(updatedLogs));
     
-    try {
-      if (updatedProducts.length > 0) await supabase.from("products").upsert(updatedProducts);
-      if (updatedLogs.length > 0) await supabase.from("price_logs").upsert(updatedLogs);
-    } catch (e) {
-      console.error("Supabase sync error:", e);
-    }
+    setTimeout(async () => {
+      try {
+        if (updatedProducts.length > 0) await supabase.from("products").upsert(updatedProducts);
+        if (updatedLogs.length > 0) await supabase.from("price_logs").upsert(updatedLogs);
+      } catch (e) {
+        console.error("Supabase sync error:", e);
+      }
+    }, 0);
   };
 
   // Toast Helper
@@ -565,6 +580,68 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     showToast(`✅ [${prod?.name || ''}] ${selectedDate} 날짜의 가격 정보가 저장되었습니다!`);
   };
 
+  // Direct inline price change from table
+  const handleInlinePriceChange = (
+    productId: string, 
+    field: 'naverPrice' | 'naverShipping' | 'coupangSeller' | 'coupangPrice' | 'coupangShipping', 
+    value: string
+  ) => {
+    const baseLog = getOrCreateLogForDate(productId, selectedDate);
+    
+    let navPrice = baseLog.naverPrice;
+    let navShip = baseLog.naverShipping;
+    let coupSeller = baseLog.coupangSeller || "";
+    let coupPrice = baseLog.coupangPrice;
+    let coupShip = baseLog.coupangShipping;
+
+    if (field === 'naverPrice') navPrice = parsePrice(value);
+    if (field === 'naverShipping') navShip = parsePrice(value);
+    if (field === 'coupangSeller') coupSeller = value;
+    if (field === 'coupangPrice') coupPrice = parsePrice(value);
+    if (field === 'coupangShipping') coupShip = parsePrice(value);
+
+    const naverTotal = navPrice > 0 ? (navPrice + navShip) : 0;
+    const coupangTotal = coupPrice > 0 ? (coupPrice + coupShip) : 0;
+    const difference = (naverTotal > 0 && coupangTotal > 0) ? (naverTotal - coupangTotal) : 0;
+
+    const existingLogIndex = priceLogs.findIndex(
+      (log) => log.productId === productId && log.date === selectedDate
+    );
+
+    const newLog: PriceLog = {
+      ...baseLog,
+      id: `log-${productId}-${selectedDate}`,
+      date: selectedDate,
+      productId: productId,
+      naverPrice: navPrice,
+      naverShipping: navShip,
+      naverTotal,
+      coupangSeller: coupSeller,
+      coupangPrice: coupPrice,
+      coupangShipping: coupShip,
+      coupangTotal,
+      difference,
+    };
+
+    const updatedLogs = [...priceLogs];
+    if (existingLogIndex >= 0) {
+      updatedLogs[existingLogIndex] = newLog;
+    } else {
+      updatedLogs.push(newLog);
+    }
+
+    // Sync right sidebar form inputs if editing the currently selected product
+    if (productId === selectedProductId) {
+      if (field === 'naverPrice') setEditNaverPrice(value);
+      if (field === 'naverShipping') setEditNaverShipping(value);
+      if (field === 'coupangSeller') setEditCoupangSeller(value);
+      if (field === 'coupangPrice') setEditCoupangPrice(value);
+      if (field === 'coupangShipping') setEditCoupangShipping(value);
+    }
+
+    saveToLocalStorage(products, updatedLogs);
+  };
+
   const handleKeywordNameChange = (productId: string, index: number, value: string) => {
     const updatedProducts = products.map(p => {
       if (p.id === productId) {
@@ -776,7 +853,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
   };
 
   // Delete product
-  const handleDeleteProduct = (productId: string) => {
+  const handleDeleteProduct = async (productId: string) => {
     if (confirm("정말로 이 품목과 연동된 가격 모니터링 로그를 삭제하시겠습니까?")) {
       const updatedProducts = products.filter((p) => p.id !== productId);
       const updatedLogs = priceLogs.filter((l) => l.productId !== productId);
@@ -785,8 +862,24 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       if (selectedProductId === productId) {
         setSelectedProductId(updatedProducts[0]?.id || "");
       }
+
+      try {
+        await supabase.from("products").delete().eq("id", productId);
+        await supabase.from("price_logs").delete().eq("productId", productId);
+      } catch (e) {
+        console.error("Supabase delete error:", e);
+      }
+
       showToast("품목이 성공적으로 삭제되었습니다.");
     }
+  };
+
+  const handleResetDefaultData = () => {
+    const defaultProducts = INITIAL_PRODUCTS;
+    const defaultLogs = generateHistoricalLogs();
+    saveToLocalStorage(defaultProducts, defaultLogs);
+    setSelectedProductId(defaultProducts[0]?.id || "");
+    showToast("✅ 기본 14개 품목 데이터가 성공적으로 복원되었습니다!");
   };
 
   // Export database as JSON
@@ -877,7 +970,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
       {/* Header */}
       <header className="bg-slate-900 text-white shadow-md border-b border-slate-800" id="main-header">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-amber-500 text-slate-950 p-2.5 rounded-xl font-bold shadow-md flex items-center justify-center">
               <FileSpreadsheet size={24} className="text-slate-950" />
@@ -931,6 +1024,36 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
               </label>
 
               <button 
+                onClick={handleResetDefaultData}
+                title="기본 14개 모니터링 품목 복원하기"
+                className="bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm font-medium flex items-center gap-1.5 transition-colors"
+                id="btn-reset-default"
+              >
+                <RefreshCw size={14} />
+                <span className="hidden sm:inline">기본 품목 복원</span>
+              </button>
+
+              <button 
+                onClick={handleRestoreRealRanks}
+                title="실제 기록되어 있던 순위 데이터(21위, 199위, 59위, 25위 등)를 복원합니다."
+                className="bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm font-medium flex items-center gap-1.5 transition-colors"
+                id="btn-restore-real-header"
+              >
+                <RefreshCw size={14} />
+                <span className="hidden sm:inline">실제 순위 복원</span>
+              </button>
+
+              <button 
+                onClick={handleClearDummyRanks}
+                title="샘플로 자동 채워져 있던 더미 순위 데이터를 초기화합니다."
+                className="bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm font-medium flex items-center gap-1.5 transition-colors"
+                id="btn-clear-dummy-header"
+              >
+                <Trash2 size={14} />
+                <span className="hidden sm:inline">더미 순위 초기화</span>
+              </button>
+
+              <button 
                 onClick={() => setIsManagingProducts(true)}
                 className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-lg font-semibold text-sm flex items-center gap-1.5 shadow-sm transition-all"
                 id="btn-manage-products"
@@ -944,7 +1067,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 w-full flex flex-col gap-6" id="main-content">
+      <main className="flex-1 max-w-[1600px] mx-auto px-4 py-6 sm:px-6 lg:px-8 w-full flex flex-col gap-6" id="main-content">
         
         {/* Statistics Widgets */}
         <section className="grid grid-cols-2 lg:grid-cols-5 gap-4" id="stats-section">
@@ -1050,16 +1173,16 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-400 font-medium border-b border-slate-100 text-[11px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3 text-center w-10">번호</th>
-                    <th className="py-2.5 px-3">모니터링 품목</th>
-                    <th className="py-2.5 px-3 text-right bg-amber-50/50 text-amber-900 border-l border-slate-100 font-bold">네이버 판매가</th>
-                    <th className="py-2.5 px-3 text-right bg-amber-50/50 text-amber-900">배송비</th>
-                    <th className="py-2.5 px-3 text-right bg-amber-100/60 text-amber-950 font-bold border-r border-slate-100" style={{ backgroundColor: "#FFF2CC" }}>네이버 합계</th>
-                    <th className="py-2.5 px-3 text-center bg-blue-50/50 text-blue-900">타판매자</th>
-                    <th className="py-2.5 px-3 text-right bg-blue-50/50 text-blue-900 font-bold">쿠팡 판매가</th>
-                    <th className="py-2.5 px-3 text-right bg-blue-50/50 text-blue-900">배송비</th>
-                    <th className="py-2.5 px-3 text-right text-blue-950 font-bold border-r border-slate-100" style={{ backgroundColor: "#DDEBF7" }}>쿠팡 합계</th>
-                    <th className="py-2.5 px-3 text-right font-bold w-24">차액</th>
+                    <th className="py-2 px-1.5 text-center w-8">번호</th>
+                    <th className="py-2 px-1.5 min-w-[160px]">모니터링 품목</th>
+                    <th className="py-2 px-1 text-right bg-amber-50/50 text-amber-900 border-l border-slate-100 font-bold whitespace-nowrap">네이버 판매가</th>
+                    <th className="py-2 px-1 text-right bg-amber-50/50 text-amber-900 whitespace-nowrap">배송비</th>
+                    <th className="py-2 px-1.5 text-right bg-amber-100/60 text-amber-950 font-bold border-r border-slate-100 whitespace-nowrap" style={{ backgroundColor: "#FFF2CC" }}>네이버 합계</th>
+                    <th className="py-2 px-1 text-center bg-blue-50/50 text-blue-900 whitespace-nowrap">타판매자</th>
+                    <th className="py-2 px-1 text-right bg-blue-50/50 text-blue-900 font-bold whitespace-nowrap">쿠팡 판매가</th>
+                    <th className="py-2 px-1 text-right bg-blue-50/50 text-blue-900 whitespace-nowrap">배송비</th>
+                    <th className="py-2 px-1.5 text-right text-blue-950 font-bold border-r border-slate-100 whitespace-nowrap" style={{ backgroundColor: "#DDEBF7" }}>쿠팡 합계</th>
+                    <th className="py-2 px-1.5 text-right font-bold whitespace-nowrap">차액</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1076,7 +1199,13 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                     <tr>
                       <td colSpan={10} className="text-center py-10 text-slate-400">
                         <Info size={24} className="mx-auto mb-2 text-slate-300" />
-                        조건에 일치하는 모니터링 품목이 없습니다.
+                        <p className="mb-2">조건에 일치하는 모니터링 품목이 없습니다.</p>
+                        <button 
+                          onClick={handleResetDefaultData}
+                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-xs inline-flex items-center gap-1.5"
+                        >
+                          <RefreshCw size={13} /> 기본 14개 품목 복원하기
+                        </button>
                       </td>
                     </tr>
                   ) : (
@@ -1094,12 +1223,12 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                             }`}
                             id={`row-${item.id}`}
                           >
-                            <td className="py-3 px-3 text-center text-xs text-slate-400 group-hover:text-slate-600">
+                            <td className="py-2 px-1 text-center text-xs text-slate-400 group-hover:text-slate-600">
                               {idx + 1}
                             </td>
                             
-                            <td className="py-3 px-3 min-w-[240px]">
-                              <div className="flex items-center gap-2">
+                            <td className="py-2 px-1.5 min-w-[160px]">
+                              <div className="flex items-center gap-1.5">
                                 <span className="font-semibold text-slate-900 text-xs line-clamp-1">{item.name}</span>
                                 <button
                                   onClick={(e) => {
@@ -1107,14 +1236,14 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                     navigator.clipboard.writeText(item.name);
                                     showToast(`📋 [${item.name}] 상품명이 복사되었습니다!`);
                                   }}
-                                  className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded transition-all font-semibold shrink-0"
+                                  className="inline-flex items-center gap-0.5 text-[9px] text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-1 py-0.5 rounded transition-all font-semibold shrink-0"
                                   title="상품명 복사하기"
                                 >
-                                  <Copy size={10} /> 복사
+                                  <Copy size={9} /> 복사
                                 </button>
                               </div>
                               
-                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              <div className="flex items-center gap-1 mt-1 flex-wrap">
                                 {item.naverUrl ? (
                                   <div className="inline-flex items-center bg-amber-50 border border-amber-200/80 rounded overflow-hidden shadow-2xs">
                                     <a 
@@ -1122,10 +1251,10 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                       target="_blank" 
                                       rel="noopener noreferrer" 
                                       onClick={(e) => e.stopPropagation()}
-                                      className="text-[10px] text-amber-800 hover:bg-amber-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-amber-200/60"
+                                      className="text-[9px] text-amber-800 hover:bg-amber-100 px-1 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-amber-200/60"
                                       title="네이버 쇼핑 페이지 열기"
                                     >
-                                      네이버 쇼핑 <ExternalLink size={8} />
+                                      네이버 <ExternalLink size={7} />
                                     </a>
                                     <button
                                       onClick={(e) => {
@@ -1133,10 +1262,10 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                         navigator.clipboard.writeText(item.naverUrl!);
                                         showToast(`📋 [네이버 쇼핑 URL] 복사되었습니다!`);
                                       }}
-                                      className="text-[10px] text-amber-700 hover:bg-amber-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
+                                      className="text-[9px] text-amber-700 hover:bg-amber-100 px-1 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
                                       title="네이버 쇼핑 URL 복사하기"
                                     >
-                                      <Copy size={9} /> 복사
+                                      <Copy size={8} />
                                     </button>
                                   </div>
                                 ) : (
@@ -1145,9 +1274,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                       e.stopPropagation();
                                       openLinkModal(item);
                                     }}
-                                    className="text-[10px] text-amber-600 hover:text-amber-800 border border-dashed border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-medium"
+                                    className="text-[9px] text-amber-600 hover:text-amber-800 border border-dashed border-amber-300 px-1 py-0.5 rounded flex items-center gap-0.5 font-medium"
                                   >
-                                    + 네이버 링크
+                                    + 네이버
                                   </button>
                                 )}
 
@@ -1158,10 +1287,10 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                       target="_blank" 
                                       rel="noopener noreferrer" 
                                       onClick={(e) => e.stopPropagation()}
-                                      className="text-[10px] text-blue-800 hover:bg-blue-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-blue-200/60"
+                                      className="text-[9px] text-blue-800 hover:bg-blue-100 px-1 py-0.5 flex items-center gap-0.5 font-medium transition-colors border-r border-blue-200/60"
                                       title="쿠팡 쇼핑 페이지 열기"
                                     >
-                                      쿠팡 바로가기 <ExternalLink size={8} />
+                                      쿠팡 <ExternalLink size={7} />
                                     </a>
                                     <button
                                       onClick={(e) => {
@@ -1169,10 +1298,10 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                         navigator.clipboard.writeText(item.coupangUrl!);
                                         showToast(`📋 [쿠팡 바로가기 URL] 복사되었습니다!`);
                                       }}
-                                      className="text-[10px] text-blue-700 hover:bg-blue-100 px-1.5 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
+                                      className="text-[9px] text-blue-700 hover:bg-blue-100 px-1 py-0.5 flex items-center gap-0.5 font-medium transition-colors"
                                       title="쿠팡 바로가기 URL 복사하기"
                                     >
-                                      <Copy size={9} /> 복사
+                                      <Copy size={8} />
                                     </button>
                                   </div>
                                 ) : (
@@ -1181,9 +1310,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                       e.stopPropagation();
                                       openLinkModal(item);
                                     }}
-                                    className="text-[10px] text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-medium"
+                                    className="text-[9px] text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 px-1 py-0.5 rounded flex items-center gap-0.5 font-medium"
                                   >
-                                    + 쿠팡 링크
+                                    + 쿠팡
                                   </button>
                                 )}
 
@@ -1192,10 +1321,10 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                     e.stopPropagation();
                                     openLinkModal(item);
                                   }}
-                                  className="text-[10px] text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-medium transition-colors"
+                                  className="text-[9px] text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-1 py-0.5 rounded flex items-center gap-0.5 font-medium transition-colors"
                                   title="쇼핑몰 링크 수정하기"
                                 >
-                                  <LinkIcon size={9} /> 링크 수정
+                                  <LinkIcon size={8} /> 링크
                                 </button>
 
                                 <button
@@ -1203,24 +1332,46 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                     e.stopPropagation();
                                     handleDeleteProduct(item.id);
                                   }}
-                                  className="text-[10px] text-rose-500 hover:text-rose-700 flex items-center gap-0.5 ml-auto mr-1 font-semibold"
+                                  className="text-[9px] text-rose-500 hover:text-rose-700 flex items-center gap-0.5 ml-auto mr-1 font-semibold"
                                   title="이 품목 삭제하기"
                                 >
-                                  <Trash2 size={10} /> 삭제
+                                  <Trash2 size={9} /> 삭제
                                 </button>
                               </div>
                             </td>
 
-                            <td className="py-3 px-3 text-right bg-amber-50/20 text-slate-800">
-                              {item.naverPrice > 0 ? `${item.naverPrice.toLocaleString()}원` : "-"}
+                            <td className="py-2 px-1 text-right bg-amber-50/20 text-slate-800">
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={item.naverPrice > 0 ? item.naverPrice : ""}
+                                onChange={(e) => handleInlinePriceChange(item.id, 'naverPrice', e.target.value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductId(item.id);
+                                }}
+                                className="w-16 text-right bg-white hover:bg-amber-50/80 focus:bg-white border border-slate-200 focus:border-amber-500 rounded p-1 text-xs outline-none font-semibold text-slate-800 transition-all placeholder-slate-300"
+                                title="네이버 판매가 직접 입력"
+                              />
                             </td>
 
-                            <td className="py-3 px-3 text-right bg-amber-50/20 text-slate-500 text-xs">
-                              {item.naverPrice > 0 ? (item.naverShipping === 0 ? "무료" : `${item.naverShipping.toLocaleString()}원`) : "-"}
+                            <td className="py-2 px-1 text-right bg-amber-50/20 text-slate-500 text-xs">
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={item.naverShipping > 0 ? item.naverShipping : (item.naverShipping === 0 && item.naverPrice > 0 ? "0" : "")}
+                                onChange={(e) => handleInlinePriceChange(item.id, 'naverShipping', e.target.value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductId(item.id);
+                                }}
+                                className="w-12 text-right bg-white hover:bg-amber-50/80 focus:bg-white border border-slate-200 focus:border-amber-500 rounded p-1 text-xs outline-none transition-all font-medium text-slate-700 placeholder-slate-300"
+                                title="네이버 배송비 (0=무료)"
+                              />
                             </td>
 
                             <td 
-                              className={`py-3 px-3 text-right font-semibold border-r border-slate-100 transition-all ${
+                              className={`py-2 px-1.5 text-right font-semibold border-r border-slate-100 whitespace-nowrap transition-all ${
                                 isNaverCheaper ? "bg-amber-100 text-amber-950 ring-2 ring-emerald-500 ring-inset" : "bg-amber-50 text-slate-900"
                               }`}
                               style={!isNaverCheaper ? { backgroundColor: "#FFF9E6" } : undefined}
@@ -1228,16 +1379,49 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                               {item.naverTotal > 0 ? `${item.naverTotal.toLocaleString()}원` : "-"}
                             </td>
 
-                            <td className="py-3 px-3 text-center bg-blue-50/25 text-slate-600 text-xs max-w-[80px] truncate">
-                              {item.coupangPrice > 0 ? (item.coupangSeller || "-") : "-"}
+                            <td className="py-2 px-1 text-center bg-blue-50/25 text-slate-600 text-xs">
+                              <input
+                                type="text"
+                                placeholder="판매자"
+                                value={item.coupangSeller || ""}
+                                onChange={(e) => handleInlinePriceChange(item.id, 'coupangSeller', e.target.value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductId(item.id);
+                                }}
+                                className="w-14 text-center bg-white hover:bg-blue-50/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded p-1 text-xs outline-none transition-all font-medium text-slate-700 placeholder-slate-300"
+                                title="쿠팡/타판매자 이름 입력"
+                              />
                             </td>
 
-                            <td className="py-3 px-3 text-right bg-blue-50/25 text-slate-800">
-                              {item.coupangPrice > 0 ? `${item.coupangPrice.toLocaleString()}원` : "-"}
+                            <td className="py-2 px-1 text-right bg-blue-50/25 text-slate-800">
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={item.coupangPrice > 0 ? item.coupangPrice : ""}
+                                onChange={(e) => handleInlinePriceChange(item.id, 'coupangPrice', e.target.value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductId(item.id);
+                                }}
+                                className="w-16 text-right bg-white hover:bg-blue-50/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded p-1 text-xs outline-none transition-all font-semibold text-slate-800 placeholder-slate-300"
+                                title="쿠팡 판매가 직접 입력"
+                              />
                             </td>
 
-                            <td className="py-3 px-3 text-right bg-blue-50/25 text-slate-500 text-xs">
-                              {item.coupangPrice > 0 ? (item.coupangShipping === 0 ? "무료" : `${item.coupangShipping.toLocaleString()}원`) : "-"}
+                            <td className="py-2 px-1 text-right bg-blue-50/25 text-slate-500 text-xs">
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={item.coupangShipping > 0 ? item.coupangShipping : (item.coupangShipping === 0 && item.coupangPrice > 0 ? "0" : "")}
+                                onChange={(e) => handleInlinePriceChange(item.id, 'coupangShipping', e.target.value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductId(item.id);
+                                }}
+                                className="w-12 text-right bg-white hover:bg-blue-50/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded p-1 text-xs outline-none transition-all font-medium text-slate-700 placeholder-slate-300"
+                                title="쿠팡 배송비 (0=무료)"
+                              />
                             </td>
 
                             <td 
@@ -1304,11 +1488,18 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                       선택된 품목: <span className="text-slate-800">{selectedProduct.name}</span>
                     </span>
                     <button
-                      onClick={handleRestoreKeywordRankData}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md shadow-sm transition-all"
-                      title="8~9월 전체 키워드 순위 및 메모 기초 데이터 복원"
+                      onClick={handleRestoreRealRanks}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md shadow-sm transition-all"
+                      title="실제 기록되어 있던 순위 데이터(21위, 199위, 59위, 25위 등)를 복원합니다."
                     >
-                      <RefreshCw size={13} /> 8~9월 순위 데이터 복원
+                      <RefreshCw size={13} /> 실제 순위 복원
+                    </button>
+                    <button
+                      onClick={handleClearDummyRanks}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md shadow-sm transition-all"
+                      title="샘플로 자동 채워져 있던 더미 순위 데이터를 깨끗이 초기화합니다."
+                    >
+                      <Trash2 size={13} /> 더미 순위 데이터 초기화
                     </button>
                   </div>
                 </div>

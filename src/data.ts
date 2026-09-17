@@ -180,44 +180,20 @@ export function generateHistoricalLogs(): PriceLog[] {
       const coupangTotal = coupPrice > 0 ? (coupPrice + coupShip) : 0;
       const difference = (naverTotal > 0 && coupangTotal > 0) ? (naverTotal - coupangTotal) : 0;
 
-      // Special sample ranks for prod-6 (NHB 깨그라인더 양념통 70ml)
-      let naverRank1 = (1 + ((dayNum + pIdx) % 3)).toString();
-      let naverRank2 = (1 + ((dayNum * 2 + pIdx) % 4)).toString();
-      let naverRank3 = (1 + ((dayNum + pIdx * 3) % 2)).toString();
-      let naverRank4 = "";
-      let naverRank5 = "";
+      let naverRanks: string[] = [];
+      let coupangRanks: string[] = [];
 
       if (p.id === "prod-6") {
         if (date === "2026-08-30" || date === "2026-07-30") {
-          naverRank1 = "21";
-          naverRank2 = "";
-          naverRank3 = "27";
-          naverRank4 = "19";
-          naverRank5 = "";
+          naverRanks = ["21", "", "27", "19", ""];
         } else if (date === "2026-09-01") {
-          naverRank1 = "199";
-          naverRank2 = "9";
-          naverRank3 = "";
-          naverRank4 = "";
-          naverRank5 = "";
+          naverRanks = ["199", "9", "", "", ""];
         } else if (date === "2026-08-23") {
-          naverRank1 = "59";
-          naverRank2 = "";
-          naverRank3 = "";
-          naverRank4 = "";
-          naverRank5 = "";
+          naverRanks = ["59", "", "", "", ""];
         } else if (date === "2026-08-27") {
-          naverRank1 = "";
-          naverRank2 = "25";
-          naverRank3 = "";
-          naverRank4 = "";
-          naverRank5 = "";
+          naverRanks = ["", "25", "", "", ""];
         }
       }
-
-      const coupangRank1 = (1 + ((dayNum * 3 + pIdx) % 4)).toString();
-      const coupangRank2 = (1 + ((dayNum + pIdx * 2) % 3)).toString();
-      const coupangRank3 = (1 + ((dayNum * 2 + pIdx * 3) % 4)).toString();
 
       logs.push({
         id: `log-${p.id}-${date}`,
@@ -231,10 +207,8 @@ export function generateHistoricalLogs(): PriceLog[] {
         coupangShipping: coupShip,
         coupangTotal,
         difference,
-        keywordRanks: p.id === "prod-6" 
-          ? [naverRank1, naverRank2, naverRank3, naverRank4, naverRank5] 
-          : [naverRank1, naverRank2, naverRank3],
-        coupangKeywordRanks: [coupangRank1, coupangRank2, coupangRank3],
+        keywordRanks: naverRanks,
+        coupangKeywordRanks: coupangRanks,
         memo: (p.id === "prod-6" || p.id === "prod-1") ? (sampleMemos[date] || "") : ""
       });
     });
