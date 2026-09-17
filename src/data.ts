@@ -183,6 +183,11 @@ export function generateHistoricalLogs(): PriceLog[] {
       let naverRanks: string[] = [];
       let coupangRanks: string[] = [];
 
+      const baseRank1 = Math.max(1, ((dayNum * 3 + pIdx * 7) % 25) + 1);
+      const baseRank2 = Math.max(1, ((dayNum * 2 + pIdx * 5) % 18) + 2);
+      const baseRank3 = Math.max(1, ((dayNum * 5 + pIdx * 3) % 30) + 1);
+      const baseRank4 = Math.max(1, ((dayNum * 4 + pIdx * 2) % 40) + 5);
+
       if (p.id === "prod-6") {
         if (date === "2026-08-30" || date === "2026-07-30") {
           naverRanks = ["21", "", "27", "19", ""];
@@ -192,7 +197,13 @@ export function generateHistoricalLogs(): PriceLog[] {
           naverRanks = ["59", "", "", "", ""];
         } else if (date === "2026-08-27") {
           naverRanks = ["", "25", "", "", ""];
+        } else {
+          naverRanks = [baseRank1.toString(), baseRank2.toString(), baseRank3.toString(), "", ""];
         }
+        coupangRanks = [((baseRank1 % 10) + 1).toString(), ((baseRank2 % 8) + 1).toString(), ((baseRank3 % 12) + 1).toString(), "", ""];
+      } else {
+        naverRanks = [baseRank1.toString(), baseRank2.toString(), baseRank3.toString(), baseRank4.toString(), ""];
+        coupangRanks = [((baseRank1 % 12) + 1).toString(), ((baseRank2 % 10) + 1).toString(), ((baseRank3 % 15) + 1).toString(), "", ""];
       }
 
       logs.push({
