@@ -14,6 +14,75 @@ import { Product, PriceLog } from "./types";
 import { INITIAL_PRODUCTS, generateHistoricalLogs } from "./data";
 import { supabase } from "./supabase";
 
+const REAL_RANK_DATES = ["2026-07-30", "2026-08-30", "2026-09-01", "2026-08-23", "2026-08-27"];
+const seedHistoricalLogs = generateHistoricalLogs();
+
+const getUserCustomRanksMap = (): Record<string, { naver?: string[]; coupang?: string[] }> => {
+  try {
+    const raw = localStorage.getItem("user_custom_ranks_map");
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+};
+
+const setUserCustomRank = (productId: string, date: string, platform: 'naver' | 'coupang', ranks: string[]) => {
+  const map = getUserCustomRanksMap();
+  const key = `${productId}:${date}`;
+  if (!map[key]) map[key] = {};
+  if (platform === 'naver') map[key].naver = ranks;
+  if (platform === 'coupang') map[key].coupang = ranks;
+  localStorage.setItem("user_custom_ranks_map", JSON.stringify(map));
+};
+
+const isDummyCleared = () => {
+  try {
+    return localStorage.getItem("dummy_ranks_cleared") === "true";
+  } catch (e) {
+    return false;
+  }
+};
+
+function cleanLogRanks(log: any): PriceLog {
+  const dateStr = String(log.date || "").substring(0, 10);
+  const pId = log.productId || log.product_id || "";
+  const customMap = getUserCustomRanksMap();
+  const customKey = `${pId}:${dateStr}`;
+  const customRecord = customMap[customKey];
+
+  const dummyCleared = isDummyCleared();
+  const isRealSeedDate = !dummyCleared && REAL_RANK_DATES.includes(dateStr);
+
+  let finalNaverRanks: string[] = [];
+  let finalCoupangRanks: string[] = [];
+
+  if (customRecord?.naver && customRecord.naver.some(r => r && r.trim() !== "")) {
+    finalNaverRanks = customRecord.naver;
+  } else if (isRealSeedDate) {
+    const seed = seedHistoricalLogs.find(s => s.productId === pId && s.date === dateStr);
+    finalNaverRanks = seed?.keywordRanks || [];
+  } else {
+    finalNaverRanks = [];
+  }
+
+  if (customRecord?.coupang && customRecord.coupang.some(r => r && r.trim() !== "")) {
+    finalCoupangRanks = customRecord.coupang;
+  } else if (isRealSeedDate) {
+    const seed = seedHistoricalLogs.find(s => s.productId === pId && s.date === dateStr);
+    finalCoupangRanks = seed?.coupangKeywordRanks || [];
+  } else {
+    finalCoupangRanks = [];
+  }
+
+  return {
+    ...log,
+    date: dateStr,
+    productId: pId,
+    keywordRanks: finalNaverRanks,
+    coupangKeywordRanks: finalCoupangRanks
+  };
+}
+
 export default function App() {
   // State for products and price logs
   const [products, setProducts] = useState<Product[]>([]);
@@ -25,7 +94,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("all"); // all, naver_cheaper, coupang_cheaper, same, no_coupang
   
-  // Selected product for chart and quick logging
+  // Selected product for quick logging & chart
   const [selectedProductId, setSelectedProductId] = useState<string>("prod-6");
   
   // AI Parsing states
@@ -228,25 +297,13 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
         };
       });
 
-      // Automatically enrich logs with seed keyword ranks and memos for 2026-07 if missing
-      const updatedLogs = [...currentLogs];
+      // Purge ONLY old dummy math formula ranks, keep all user entered and real seed ranks
+      const updatedLogs: PriceLog[] = currentLogs.map(existing => cleanLogRanks(existing));
+
+      // Include missing seed dates
       seedLogs.forEach(seed => {
-        if (updatedProducts.some(p => p.id === seed.productId)) {
-          const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
-          if (idx >= 0) {
-            const existing = updatedLogs[idx];
-            const hasKeywordRanks = existing.keywordRanks && existing.keywordRanks.some(r => r);
-            const hasCoupangRanks = existing.coupangKeywordRanks && existing.coupangKeywordRanks.some(r => r);
-            
-            updatedLogs[idx] = {
-              ...existing,
-              keywordRanks: hasKeywordRanks ? existing.keywordRanks : seed.keywordRanks,
-              coupangKeywordRanks: hasCoupangRanks ? existing.coupangKeywordRanks : seed.coupangKeywordRanks,
-              memo: existing.memo || seed.memo
-            };
-          } else {
-            updatedLogs.push(seed);
-          }
+        if (!updatedLogs.some(l => l.productId === seed.productId && l.date === seed.date)) {
+          updatedLogs.push(seed);
         }
       });
 
@@ -273,9 +330,12 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
           
           if (prodRes?.data && prodRes.data.length > 0) {
             setProducts(prodRes.data);
-            if (logRes?.data) setPriceLogs(logRes.data);
+            if (logRes?.data) {
+              const sanitizedCloudLogs = logRes.data.map((cloudLog: any) => cleanLogRanks(cloudLog));
+              setPriceLogs(sanitizedCloudLogs);
+              localStorage.setItem("price_monitor_logs", JSON.stringify(sanitizedCloudLogs));
+            }
             localStorage.setItem("price_monitor_products", JSON.stringify(prodRes.data));
-            if (logRes?.data) localStorage.setItem("price_monitor_logs", JSON.stringify(logRes.data));
           }
         } catch (err) {
           // Supabase timeout or network error - local data is already rendered instantly
@@ -290,38 +350,55 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
   // Restore real entered keyword ranks (e.g. 21위, 199위, 59위, 25위)
   const handleRestoreRealRanks = () => {
+    localStorage.removeItem("dummy_ranks_cleared");
     const seedLogs = generateHistoricalLogs(products);
+    const customMap = getUserCustomRanksMap();
     const updatedLogs = [...priceLogs];
 
     seedLogs.forEach(seed => {
       const idx = updatedLogs.findIndex(l => l.productId === seed.productId && l.date === seed.date);
+      const key = `${seed.productId}:${seed.date}`;
+      const rec = customMap[key];
+      const navRanks = (rec?.naver && rec.naver.some(r => r && r.trim() !== "")) ? rec.naver : (seed.keywordRanks || []);
+      const coupRanks = (rec?.coupang && rec.coupang.some(r => r && r.trim() !== "")) ? rec.coupang : (seed.coupangKeywordRanks || []);
+
       if (idx >= 0) {
         updatedLogs[idx] = {
           ...updatedLogs[idx],
-          keywordRanks: seed.keywordRanks,
-          coupangKeywordRanks: seed.coupangKeywordRanks,
+          keywordRanks: navRanks,
+          coupangKeywordRanks: coupRanks,
           memo: updatedLogs[idx].memo || seed.memo
         };
       } else {
-        updatedLogs.push(seed);
+        updatedLogs.push({
+          ...seed,
+          keywordRanks: navRanks,
+          coupangKeywordRanks: coupRanks
+        });
       }
     });
 
     saveToLocalStorage(products, updatedLogs);
-    showToast("✅ 실제 기록되어 있던 키워드 순위(21위, 199위, 59위, 25위 등)가 성공적으로 복원되었습니다!");
+    showToast("✅ 초기 샘플 기록 및 사용자 입력 순위가 모두 복원되었습니다!");
   };
 
-  // Clear fake/dummy sample ranks with confirmation
+  // Clear fake/dummy sample ranks, keeping ONLY user entered custom ranks
   const handleClearDummyRanks = () => {
-    if (confirm("등록하신 품목, 쇼핑몰 링크, 판매가, 배송비, 메모는 전혀 삭제되지 않고 안전하게 유지됩니다.\n\n예시용으로 자동 채워져 있던 샘플 키워드 순위 숫자만 지우시겠습니까?")) {
-      const updatedLogs = priceLogs.map(l => ({
+    localStorage.setItem("dummy_ranks_cleared", "true");
+    const customMap = getUserCustomRanksMap();
+
+    const updatedLogs = priceLogs.map(l => {
+      const key = `${l.productId}:${l.date}`;
+      const rec = customMap[key];
+      return {
         ...l,
-        keywordRanks: [],
-        coupangKeywordRanks: []
-      }));
-      saveToLocalStorage(products, updatedLogs);
-      showToast("🧹 샘플 키워드 순위만 초기화되었습니다. 품목 및 가격 데이터는 완벽히 보존됩니다!");
-    }
+        keywordRanks: (rec?.naver && rec.naver.some(r => r && r.trim() !== "")) ? rec.naver : [],
+        coupangKeywordRanks: (rec?.coupang && rec.coupang.some(r => r && r.trim() !== "")) ? rec.coupang : []
+      };
+    });
+
+    saveToLocalStorage(products, updatedLogs);
+    showToast("🧹 더미 키워드 순위가 모두 초기화되었습니다! (직접 입력하신 순위만 깨끗하게 남습니다)");
   };
 
   // Sync state changes with localStorage and Supabase (non-blocking)
@@ -679,6 +756,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     const ranks = [...(log.keywordRanks || Array(6).fill(""))];
     ranks[index] = value;
     log.keywordRanks = ranks;
+    (log as any).isUserEntered = true;
+
+    setUserCustomRank(productId, selectedDate, 'naver', ranks);
 
     if (existingLogIndex >= 0) {
       updatedLogs[existingLogIndex] = log;
@@ -697,6 +777,9 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     const ranks = [...(log.coupangKeywordRanks || Array(6).fill(""))];
     ranks[index] = value;
     log.coupangKeywordRanks = ranks;
+    (log as any).isUserEntered = true;
+
+    setUserCustomRank(productId, selectedDate, 'coupang', ranks);
 
     if (existingLogIndex >= 0) {
       updatedLogs[existingLogIndex] = log;
@@ -1879,29 +1962,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                             )}
                           </div>
 
-                          {/* Coupang Memo Summary Card */}
-                          {logsWithMemos.length > 0 && (
-                            <div className="mt-1 bg-amber-50/70 rounded-xl p-3.5 border border-amber-200/70 shadow-xs">
-                              <div className="flex items-center gap-2 mb-2.5">
-                                <span className="bg-amber-100 text-amber-900 text-[11px] font-bold px-2 py-0.5 rounded shadow-2xs">
-                                  {rangeLabel}
-                                </span>
-                                <h4 className="text-xs font-bold text-slate-800">
-                                  전월/당월 특이사항 모아보기
-                                </h4>
-                              </div>
-                              <div className="flex flex-col gap-1.5 pl-1">
-                                {logsWithMemos.sort((a, b) => a.date.localeCompare(b.date)).map(log => (
-                                  <div key={`memo-summary-coupang-${log.date}`} className="text-xs flex items-center gap-2.5 bg-white p-2 rounded-lg border border-amber-100/80 shadow-2xs">
-                                    <span className="font-bold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded text-[11px] shrink-0">
-                                      {log.date.substring(5)}
-                                    </span>
-                                    <span className="text-slate-700 font-medium break-all">{log.memo}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+
                         </>
                       );
                     })()}
