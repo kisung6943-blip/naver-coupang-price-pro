@@ -83,6 +83,14 @@ function cleanLogRanks(log: any): PriceLog {
   };
 }
 
+const getTodayDateString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function App() {
   // State for products and price logs
   const [products, setProducts] = useState<Product[]>([]);
@@ -90,7 +98,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
   // UI filter states
-  const [selectedDate, setSelectedDate] = useState<string>("2026-09-16");
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString());
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("all"); // all, naver_cheaper, coupang_cheaper, same, no_coupang
   
@@ -1082,6 +1090,14 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                 className="bg-transparent text-white text-sm outline-none cursor-pointer border-none font-medium"
                 id="date-picker"
               />
+              <button
+                type="button"
+                onClick={() => setSelectedDate(getTodayDateString())}
+                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2 py-0.5 rounded transition-colors"
+                title="오늘 날짜로 변경"
+              >
+                오늘
+              </button>
             </div>
 
             {/* Backups */}
