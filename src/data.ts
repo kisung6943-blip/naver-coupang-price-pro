@@ -3,10 +3,10 @@ import { Product, PriceLog } from "./types";
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: "prod-1",
-    name: "휘슬러유니메틱",
-    naverUrl: "https://search.shopping.naver.com/search/all?query=휘슬러유니메틱",
-    coupangUrl: "https://www.coupang.com/np/search?component=&q=휘슬러유니메틱",
-    keywords: ["휘슬러유니메틱", "휘슬러부품", "휘슬러압력밥솥유니메틱"]
+    name: "휘슬러유니버틱",
+    naverUrl: "https://search.shopping.naver.com/search/all?query=휘슬러유니버틱",
+    coupangUrl: "https://www.coupang.com/np/search?component=&q=휘슬러유니버틱",
+    keywords: ["휘슬러유니버틱", "휘슬러유니메틱", "휘슬러부품"]
   },
   {
     id: "prod-2",
@@ -101,27 +101,29 @@ export const INITIAL_PRODUCTS: Product[] = [
   }
 ];
 
-const TODAY_PRICES: Record<string, {
+export const TODAY_PRICES: Record<string, {
   naverPrice: number;
   naverShipping: number;
   coupangSeller: string;
   coupangPrice: number;
   coupangShipping: number;
 }> = {
-  "prod-1": { naverPrice: 12000, naverShipping: 3000, coupangSeller: "휘슬러as", coupangPrice: 11000, coupangShipping: 2500 },
-  "prod-2": { naverPrice: 2650, naverShipping: 0, coupangSeller: "휘슬러as", coupangPrice: 2660, coupangShipping: 0 },
-  "prod-3": { naverPrice: 5800, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-4": { naverPrice: 1070, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-5": { naverPrice: 8890, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-6": { naverPrice: 8700, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-7": { naverPrice: 4500, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-8": { naverPrice: 7900, naverShipping: 2500, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-9": { naverPrice: 13000, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-10": { naverPrice: 0, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-11": { naverPrice: 28000, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-12": { naverPrice: 0, naverShipping: 0, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-13": { naverPrice: 8900, naverShipping: 3000, coupangSeller: "", coupangPrice: 0, coupangShipping: 0 },
-  "prod-14": { naverPrice: 5890, naverShipping: 3000, coupangSeller: "휘슬러as", coupangPrice: 5900, coupangShipping: 3000 }
+  "prod-1": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "휘슬러유니버틱": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "휘슬러유니메틱": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-2": { naverPrice: 8890, naverShipping: 0, coupangSeller: "판매자", coupangPrice: 0, coupangShipping: 0 },
+  "prod-3": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-4": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-5": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-6": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-7": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-8": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-9": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-10": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-11": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-12": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-13": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 },
+  "prod-14": { naverPrice: 8890, naverShipping: 0, coupangSeller: "쿠팡", coupangPrice: 8890, coupangShipping: 0 }
 };
 
 export function generateHistoricalLogs(currentProducts: Product[] = INITIAL_PRODUCTS): PriceLog[] {

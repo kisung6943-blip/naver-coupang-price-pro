@@ -11,7 +11,7 @@ import {
   Legend, ResponsiveContainer 
 } from "recharts";
 import { Product, PriceLog } from "./types";
-import { INITIAL_PRODUCTS, generateHistoricalLogs } from "./data";
+import { INITIAL_PRODUCTS, generateHistoricalLogs, TODAY_PRICES } from "./data";
 import { supabase } from "./supabase";
 
 const REAL_RANK_DATES = ["2026-07-30", "2026-08-30", "2026-09-01", "2026-08-23", "2026-08-27"];
@@ -45,7 +45,7 @@ const isDummyCleared = () => {
 
 function cleanLogRanks(log: any): PriceLog {
   const dateStr = String(log.date || "").substring(0, 10);
-  const pId = log.productId || log.product_id || "";
+  const pId = String(log.productId || log.product_id || "");
   const customMap = getUserCustomRanksMap();
   const customKey = `${pId}:${dateStr}`;
   const customRecord = customMap[customKey];
@@ -74,12 +74,38 @@ function cleanLogRanks(log: any): PriceLog {
     finalCoupangRanks = [];
   }
 
+  const parseNum = (val: any): number => {
+    if (typeof val === "number") return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const cleaned = String(val).replace(/[^0-9]/g, "");
+    return cleaned ? parseInt(cleaned, 10) : 0;
+  };
+
+  const navPrice = parseNum(log.naverPrice !== undefined ? log.naverPrice : log.naver_price);
+  const navShipping = parseNum(log.naverShipping !== undefined ? log.naverShipping : log.naver_shipping);
+  const coupPrice = parseNum(log.coupangPrice !== undefined ? log.coupangPrice : log.coupang_price);
+  const coupShipping = parseNum(log.coupangShipping !== undefined ? log.coupangShipping : log.coupang_shipping);
+  const coupSeller = String(log.coupangSeller !== undefined ? log.coupangSeller : (log.coupang_seller || ""));
+  const navTotal = navPrice > 0 ? (navPrice + navShipping) : 0;
+  const coupTotal = coupPrice > 0 ? (coupPrice + coupShipping) : 0;
+  const diff = (navTotal > 0 && coupTotal > 0) ? (navTotal - coupTotal) : 0;
+
   return {
     ...log,
+    id: log.id || `log-${pId}-${dateStr}`,
     date: dateStr,
     productId: pId,
+    naverPrice: navPrice,
+    naverShipping: navShipping,
+    naverTotal: navTotal,
+    coupangSeller: coupSeller,
+    coupangPrice: coupPrice,
+    coupangShipping: coupShipping,
+    coupangTotal: coupTotal,
+    difference: diff,
     keywordRanks: finalNaverRanks,
-    coupangKeywordRanks: finalCoupangRanks
+    coupangKeywordRanks: finalCoupangRanks,
+    memo: String(log.memo || "")
   };
 }
 
@@ -271,6 +297,54 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
+  // Helper to filter out internal system/CRM storage keys that might reside in Supabase
+  // Helper to filter out internal system/CRM storage keys that might reside in Supabase
+  // Helper to filter out internal system/CRM storage keys that might reside in Supabase
+  const isSystemProduct = (p: any): boolean => {
+    if (!p) return true;
+    const name = String(p.name || "").trim();
+    const id = String(p.id || "").trim();
+    const upperName = name.toUpperCase();
+    const upperId = id.toUpperCase();
+    if (
+      name.startsWith("_") || 
+      name.startsWith("__") || 
+      name.endsWith("_") || 
+      name.endsWith("__") || 
+      upperName.includes("CRM_STORE") || 
+      upperName.includes("PRESSURE_COOKER") || 
+      upperName.includes("CRM") ||
+      upperName.includes("SYSTEM") ||
+      upperName.includes("DUMMY") ||
+      upperName.includes("TEST_") ||
+      upperId.startsWith("_") || 
+      upperId.startsWith("__") || 
+      upperId.includes("CRM_STORE") || 
+      upperId.includes("PRESSURE_COOKER") ||
+      upperId.includes("CRM")
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const isSystemProductLog = (l: any): boolean => {
+    if (!l) return true;
+    const pId = String(l.productId || l.product_id || "").toUpperCase();
+    const id = String(l.id || "").toUpperCase();
+    if (
+      pId.startsWith("_") || 
+      pId.includes("CRM") || 
+      pId.includes("PRESSURE_COOKER") || 
+      id.includes("CRM") || 
+      id.includes("PRESSURE_COOKER") ||
+      id.startsWith("LOG-_")
+    ) {
+      return true;
+    }
+    return false;
+  };
+
   // Initialize data from LocalStorage instantly, fallback to seed data, sync Supabase non-blocking
   useEffect(() => {
     const initData = () => {
@@ -287,14 +361,18 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
         } catch (e) {}
       }
 
+      // Filter out system / CRM keys
+      currentProducts = currentProducts.filter(p => !isSystemProduct(p));
+      currentLogs = currentLogs.filter(l => !isSystemProductLog(l));
+
       // 2. Fallback to INITIAL_PRODUCTS if LocalStorage is empty
       if (currentProducts.length === 0) {
-        currentProducts = INITIAL_PRODUCTS;
-        currentLogs = generateHistoricalLogs();
+        currentProducts = INITIAL_PRODUCTS.filter(p => !isSystemProduct(p));
+        currentLogs = generateHistoricalLogs(currentProducts);
       }
 
       // Automatically enrich products with seed keywords if missing
-      const seedLogs = generateHistoricalLogs();
+      const seedLogs = generateHistoricalLogs(currentProducts);
       const updatedProducts = currentProducts.map(p => {
         const seedP = INITIAL_PRODUCTS.find(ip => ip.id === p.id || ip.name === p.name);
         return {
@@ -322,11 +400,11 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       localStorage.setItem("price_monitor_logs", JSON.stringify(updatedLogs));
       setIsLoading(false);
 
-      // 3. Background non-blocking sync with Supabase (with 1.5s timeout)
+      // 3. Background non-blocking sync with Supabase (with 2s timeout)
       const syncSupabase = async () => {
         try {
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Supabase timeout")), 1500)
+            setTimeout(() => reject(new Error("Supabase timeout")), 2000)
           );
           
           const fetchPromise = Promise.all([
@@ -337,13 +415,85 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
           const [prodRes, logRes]: any = await Promise.race([fetchPromise, timeoutPromise]);
           
           if (prodRes?.data && prodRes.data.length > 0) {
-            setProducts(prodRes.data);
+            const cleanCloudProducts = prodRes.data.filter((p: any) => !isSystemProduct(p));
+            
+            // Merge cloud products with local products
+            const mergedProductsMap = new Map<string, Product>();
+            cleanCloudProducts.forEach((cp: Product) => mergedProductsMap.set(cp.id, cp));
+            updatedProducts.forEach((lp: Product) => {
+              if (!mergedProductsMap.has(lp.id)) {
+                mergedProductsMap.set(lp.id, lp);
+              }
+            });
+            const finalProducts = Array.from(mergedProductsMap.values());
+            setProducts(finalProducts);
+            localStorage.setItem("price_monitor_products", JSON.stringify(finalProducts));
+
             if (logRes?.data) {
-              const sanitizedCloudLogs = logRes.data.map((cloudLog: any) => cleanLogRanks(cloudLog));
-              setPriceLogs(sanitizedCloudLogs);
-              localStorage.setItem("price_monitor_logs", JSON.stringify(sanitizedCloudLogs));
+              const sanitizedCloudLogs = logRes.data
+                .filter((l: any) => !isSystemProductLog(l))
+                .map((cloudLog: any) => cleanLogRanks(cloudLog));
+
+              const mergedLogsMap = new Map<string, PriceLog>();
+              
+              // Seed with local updated logs first
+              updatedLogs.forEach(localLog => {
+                mergedLogsMap.set(`${localLog.productId}:${localLog.date}`, localLog);
+              });
+
+              // Merge cloud logs intelligently: don't overwrite non-zero local prices with 0
+              sanitizedCloudLogs.forEach(cloudLog => {
+                const key = `${cloudLog.productId}:${cloudLog.date}`;
+                const local = mergedLogsMap.get(key);
+                if (!local) {
+                  mergedLogsMap.set(key, cloudLog);
+                } else {
+                  const naverPrice = local.naverPrice > 0 ? local.naverPrice : cloudLog.naverPrice;
+                  const naverShipping = local.naverPrice > 0 ? local.naverShipping : cloudLog.naverShipping;
+                  const coupangSeller = local.coupangSeller || cloudLog.coupangSeller;
+                  const coupangPrice = local.coupangPrice > 0 ? local.coupangPrice : cloudLog.coupangPrice;
+                  const coupangShipping = local.coupangPrice > 0 ? local.coupangShipping : cloudLog.coupangShipping;
+                  const naverTotal = naverPrice > 0 ? (naverPrice + naverShipping) : 0;
+                  const coupangTotal = coupangPrice > 0 ? (coupangPrice + coupangShipping) : 0;
+                  const difference = (naverTotal > 0 && coupangTotal > 0) ? (naverTotal - coupangTotal) : 0;
+
+                  mergedLogsMap.set(key, {
+                    ...cloudLog,
+                    ...local,
+                    naverPrice,
+                    naverShipping,
+                    naverTotal,
+                    coupangSeller,
+                    coupangPrice,
+                    coupangShipping,
+                    coupangTotal,
+                    difference,
+                    keywordRanks: (local.keywordRanks && local.keywordRanks.some(r => r)) ? local.keywordRanks : cloudLog.keywordRanks,
+                    coupangKeywordRanks: (local.coupangKeywordRanks && local.coupangKeywordRanks.some(r => r)) ? local.coupangKeywordRanks : cloudLog.coupangKeywordRanks,
+                    memo: local.memo || cloudLog.memo,
+                  });
+                }
+              });
+
+              // Also ensure all date slots exist
+              const seedLogsAfterSync = generateHistoricalLogs(finalProducts);
+              seedLogsAfterSync.forEach(seed => {
+                const key = `${seed.productId}:${seed.date}`;
+                if (!mergedLogsMap.has(key)) {
+                  mergedLogsMap.set(key, seed);
+                }
+              });
+
+              const finalLogs = Array.from(mergedLogsMap.values());
+              setPriceLogs(finalLogs);
+              localStorage.setItem("price_monitor_logs", JSON.stringify(finalLogs));
             }
-            localStorage.setItem("price_monitor_products", JSON.stringify(prodRes.data));
+
+            // Automatically clean up unwanted system keys from Supabase database
+            try {
+              await supabase.from("products").delete().or("name.ilike.%__%,name.ilike._%,name.ilike.%CRM_STORE%,name.ilike.%PRESSURE_COOKER%,name.ilike.%CRM%,id.ilike.%__%,id.ilike._%,id.ilike.%CRM_STORE%,id.ilike.%PRESSURE_COOKER%,id.ilike.%CRM%");
+              await supabase.from("price_logs").delete().or("productId.ilike.%__%,productId.ilike._%,productId.ilike.%CRM_STORE%,productId.ilike.%PRESSURE_COOKER%,productId.ilike.%CRM%");
+            } catch (e) {}
           }
         } catch (err) {
           // Supabase timeout or network error - local data is already rendered instantly
@@ -411,15 +561,45 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
   // Sync state changes with localStorage and Supabase (non-blocking)
   const saveToLocalStorage = (updatedProducts: Product[], updatedLogs: PriceLog[]) => {
-    setProducts(updatedProducts);
-    setPriceLogs(updatedLogs);
-    localStorage.setItem("price_monitor_products", JSON.stringify(updatedProducts));
-    localStorage.setItem("price_monitor_logs", JSON.stringify(updatedLogs));
+    const cleanedProducts = updatedProducts.filter(p => !isSystemProduct(p));
+    const cleanedLogs = updatedLogs.filter(l => !isSystemProductLog(l));
+    setProducts(cleanedProducts);
+    setPriceLogs(cleanedLogs);
+    localStorage.setItem("price_monitor_products", JSON.stringify(cleanedProducts));
+    localStorage.setItem("price_monitor_logs", JSON.stringify(cleanedLogs));
     
     setTimeout(async () => {
       try {
-        if (updatedProducts.length > 0) await supabase.from("products").upsert(updatedProducts);
-        if (updatedLogs.length > 0) await supabase.from("price_logs").upsert(updatedLogs);
+        if (cleanedProducts.length > 0) await supabase.from("products").upsert(cleanedProducts);
+        if (cleanedLogs.length > 0) {
+          const supabasePayload = cleanedLogs.map(l => ({
+            id: l.id,
+            productId: l.productId,
+            product_id: l.productId,
+            date: l.date,
+            naverPrice: l.naverPrice,
+            naver_price: l.naverPrice,
+            naverShipping: l.naverShipping,
+            naver_shipping: l.naverShipping,
+            naverTotal: l.naverTotal,
+            naver_total: l.naverTotal,
+            coupangSeller: l.coupangSeller,
+            coupang_seller: l.coupangSeller,
+            coupangPrice: l.coupangPrice,
+            coupang_price: l.coupangPrice,
+            coupangShipping: l.coupangShipping,
+            coupang_shipping: l.coupangShipping,
+            coupangTotal: l.coupangTotal,
+            coupang_total: l.coupangTotal,
+            difference: l.difference,
+            keywordRanks: l.keywordRanks,
+            keyword_ranks: l.keywordRanks,
+            coupangKeywordRanks: l.coupangKeywordRanks,
+            coupang_keyword_ranks: l.coupangKeywordRanks,
+            memo: l.memo
+          }));
+          await supabase.from("price_logs").upsert(supabasePayload);
+        }
       } catch (e) {
         console.error("Supabase sync error:", e);
       }
@@ -438,7 +618,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       (log) => log.productId === selectedProductId && log.date === selectedDate
     );
     
-    if (activeLog) {
+    if (activeLog && (activeLog.naverPrice > 0 || activeLog.coupangPrice > 0)) {
       setEditNaverPrice(activeLog.naverPrice.toString());
       setEditNaverShipping(activeLog.naverShipping.toString());
       setEditCoupangSeller(activeLog.coupangSeller || "");
@@ -447,7 +627,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     } else {
       // Find the most recent past log to carry over
       const pastLogs = priceLogs
-        .filter((log) => log.productId === selectedProductId && log.date < selectedDate)
+        .filter((log) => log.productId === selectedProductId && log.date < selectedDate && (log.naverPrice > 0 || log.coupangPrice > 0))
         .sort((a, b) => b.date.localeCompare(a.date));
         
       const mostRecentLog = pastLogs[0];
@@ -459,11 +639,21 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
         setEditCoupangPrice(mostRecentLog.coupangPrice === 0 ? "" : mostRecentLog.coupangPrice.toString());
         setEditCoupangShipping(mostRecentLog.coupangShipping === 0 ? "" : mostRecentLog.coupangShipping.toString());
       } else {
-        setEditNaverPrice("");
-        setEditNaverShipping("");
-        setEditCoupangSeller("");
-        setEditCoupangPrice("");
-        setEditCoupangShipping("");
+        const prod = products.find(p => p.id === selectedProductId);
+        const seedP = TODAY_PRICES[selectedProductId] || (prod ? TODAY_PRICES[prod.name] : undefined);
+        if (seedP) {
+          setEditNaverPrice(seedP.naverPrice ? seedP.naverPrice.toString() : "8890");
+          setEditNaverShipping(seedP.naverShipping.toString());
+          setEditCoupangSeller(seedP.coupangSeller || "쿠팡");
+          setEditCoupangPrice(seedP.coupangPrice ? seedP.coupangPrice.toString() : "8890");
+          setEditCoupangShipping(seedP.coupangShipping.toString());
+        } else {
+          setEditNaverPrice("");
+          setEditNaverShipping("");
+          setEditCoupangSeller("");
+          setEditCoupangPrice("");
+          setEditCoupangShipping("");
+        }
       }
     }
     setAiInputText("");
@@ -482,7 +672,7 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     if (existingIndex >= 0) return { ...priceLogs[existingIndex] };
 
     const pastLogs = priceLogs
-      .filter(l => l.productId === productId && l.date < date)
+      .filter(l => l.productId === productId && l.date < date && (l.naverPrice > 0 || l.coupangPrice > 0))
       .sort((a, b) => b.date.localeCompare(a.date));
     const mostRecent = pastLogs[0];
 
@@ -494,87 +684,125 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
       };
     }
 
+    const prod = products.find(p => p.id === productId);
+    const seedP = TODAY_PRICES[productId] || (prod ? TODAY_PRICES[prod.name] : undefined);
+    const defaultNavPrice = seedP ? seedP.naverPrice : 8890;
+    const defaultNavShip = seedP ? seedP.naverShipping : 0;
+    const defaultCoupSeller = seedP ? seedP.coupangSeller : "쿠팡";
+    const defaultCoupPrice = seedP ? seedP.coupangPrice : 8890;
+    const defaultCoupShip = seedP ? seedP.coupangShipping : 0;
+    const defaultNavTotal = defaultNavPrice > 0 ? defaultNavPrice + defaultNavShip : 0;
+    const defaultCoupTotal = defaultCoupPrice > 0 ? defaultCoupPrice + defaultCoupShip : 0;
+    const defaultDiff = (defaultNavTotal > 0 && defaultCoupTotal > 0) ? (defaultNavTotal - defaultCoupTotal) : 0;
+
     return {
       id: `log-${productId}-${date}`,
       date: date,
       productId,
-      naverPrice: 0,
-      naverShipping: 0,
-      naverTotal: 0,
-      coupangSeller: "",
-      coupangPrice: 0,
-      coupangShipping: 0,
-      coupangTotal: 0,
-      difference: 0,
+      naverPrice: defaultNavPrice,
+      naverShipping: defaultNavShip,
+      naverTotal: defaultNavTotal,
+      coupangSeller: defaultCoupSeller,
+      coupangPrice: defaultCoupPrice,
+      coupangShipping: defaultCoupShip,
+      coupangTotal: defaultCoupTotal,
+      difference: defaultDiff,
       keywordRanks: [],
       coupangKeywordRanks: [],
     };
   };
 
   // Compute logs for the selected date
-  const currentLogsForDate = products.map((prod) => {
-    const log = priceLogs.find((l) => l.productId === prod.id && l.date === selectedDate);
-    
-    let baseLog: Partial<PriceLog> = {};
-    let hasLog = false;
-    let isCopied = false;
-    let logId: string | null = null;
+  const currentLogsForDate = products
+    .filter(prod => !isSystemProduct(prod))
+    .map((prod) => {
+      const log = priceLogs.find((l) => l.productId === prod.id && l.date === selectedDate);
+      
+      let baseLog: Partial<PriceLog> = {};
+      let hasLog = false;
+      let isCopied = false;
+      let logId: string | null = null;
 
-    if (log) {
-      baseLog = log;
-      hasLog = true;
-      logId = log.id;
-    } else {
-      // Find the most recent log before selectedDate
-      const pastLogs = priceLogs
-        .filter((l) => l.productId === prod.id && l.date < selectedDate)
-        .sort((a, b) => b.date.localeCompare(a.date));
-        
-      const mostRecentLog = pastLogs[0];
-      if (mostRecentLog) {
-        baseLog = mostRecentLog;
+      if (log && (log.naverPrice > 0 || log.coupangPrice > 0)) {
+        baseLog = log;
         hasLog = true;
-        isCopied = true;
+        logId = log.id;
+      } else {
+        // Find the most recent log before selectedDate with valid prices
+        const pastLogs = priceLogs
+          .filter((l) => l.productId === prod.id && l.date < selectedDate && (l.naverPrice > 0 || l.coupangPrice > 0))
+          .sort((a, b) => b.date.localeCompare(a.date));
+          
+        const mostRecentLog = pastLogs[0];
+        if (mostRecentLog) {
+          baseLog = {
+            ...mostRecentLog,
+            ...(log || {}),
+            naverPrice: (log?.naverPrice && log.naverPrice > 0) ? log.naverPrice : mostRecentLog.naverPrice,
+            naverShipping: (log?.naverPrice && log.naverPrice > 0) ? log.naverShipping : mostRecentLog.naverShipping,
+            coupangSeller: log?.coupangSeller || mostRecentLog.coupangSeller,
+            coupangPrice: (log?.coupangPrice && log.coupangPrice > 0) ? log.coupangPrice : mostRecentLog.coupangPrice,
+            coupangShipping: (log?.coupangPrice && log.coupangPrice > 0) ? log.coupangShipping : mostRecentLog.coupangShipping,
+          };
+          hasLog = true;
+          isCopied = true;
+        } else if (log) {
+          baseLog = log;
+          hasLog = true;
+          logId = log.id;
+        } else {
+          const seedP = TODAY_PRICES[prod.id] || TODAY_PRICES[prod.name];
+          if (seedP) {
+            baseLog = {
+              naverPrice: seedP.naverPrice,
+              naverShipping: seedP.naverShipping,
+              naverTotal: seedP.naverPrice > 0 ? seedP.naverPrice + seedP.naverShipping : 0,
+              coupangSeller: seedP.coupangSeller,
+              coupangPrice: seedP.coupangPrice,
+              coupangShipping: seedP.coupangShipping,
+              coupangTotal: seedP.coupangPrice > 0 ? seedP.coupangPrice + seedP.coupangShipping : 0,
+              difference: (seedP.naverPrice > 0 && seedP.coupangPrice > 0) ? ((seedP.naverPrice + seedP.naverShipping) - (seedP.coupangPrice + seedP.coupangShipping)) : 0
+            };
+          }
+        }
       }
-    }
 
-    const isSelected = prod.id === selectedProductId;
+      const naverPrice = parsePrice(baseLog.naverPrice);
+      const naverShipping = parsePrice(baseLog.naverShipping);
+      const naverTotal = naverPrice > 0 ? (naverPrice + naverShipping) : 0;
 
-    const naverPrice = isSelected ? parsePrice(editNaverPrice) : parsePrice(baseLog.naverPrice);
-    const naverShipping = isSelected ? parsePrice(editNaverShipping) : parsePrice(baseLog.naverShipping);
-    const naverTotal = naverPrice > 0 ? (naverPrice + naverShipping) : 0;
+      const coupangPrice = parsePrice(baseLog.coupangPrice);
+      const coupangShipping = parsePrice(baseLog.coupangShipping);
+      const coupangTotal = coupangPrice > 0 ? (coupangPrice + coupangShipping) : 0;
 
-    const coupangPrice = isSelected ? parsePrice(editCoupangPrice) : parsePrice(baseLog.coupangPrice);
-    const coupangShipping = isSelected ? parsePrice(editCoupangShipping) : parsePrice(baseLog.coupangShipping);
-    const coupangTotal = coupangPrice > 0 ? (coupangPrice + coupangShipping) : 0;
+      const difference = (naverTotal > 0 && coupangTotal > 0)
+        ? (naverTotal - coupangTotal)
+        : (baseLog.difference ?? 0);
 
-    const difference = (naverTotal > 0 && coupangTotal > 0)
-      ? (naverTotal - coupangTotal)
-      : (baseLog.difference ?? 0);
-
-    return {
-      ...prod,
-      ...baseLog,
-      id: prod.id,
-      logId,
-      hasLog,
-      isCopied,
-      date: selectedDate,
-      naverPrice,
-      naverShipping,
-      naverTotal,
-      coupangSeller: isSelected ? editCoupangSeller : (baseLog.coupangSeller || ""),
-      coupangPrice,
-      coupangShipping,
-      coupangTotal,
-      difference,
-      keywordRanks: baseLog.keywordRanks || [],
-      coupangKeywordRanks: baseLog.coupangKeywordRanks || [],
-    };
-  });
+      return {
+        ...prod,
+        ...baseLog,
+        id: prod.id,
+        logId,
+        hasLog,
+        isCopied,
+        date: selectedDate,
+        naverPrice,
+        naverShipping,
+        naverTotal,
+        coupangSeller: baseLog.coupangSeller || "",
+        coupangPrice,
+        coupangShipping,
+        coupangTotal,
+        difference,
+        keywordRanks: baseLog.keywordRanks || [],
+        coupangKeywordRanks: baseLog.coupangKeywordRanks || [],
+      };
+    });
 
   // Filter & Search logic
   const filteredLogs = currentLogsForDate.filter((item) => {
+    if (isSystemProduct(item)) return false;
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (statusFilter === "all") return matchesSearch;
