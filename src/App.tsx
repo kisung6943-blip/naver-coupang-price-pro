@@ -105,7 +105,9 @@ function cleanLogRanks(log: any): PriceLog {
     difference: diff,
     keywordRanks: finalNaverRanks,
     coupangKeywordRanks: finalCoupangRanks,
-    memo: String(log.memo || "")
+    memo: String(log.memo || ""),
+    naverSales: log.naverSales !== undefined ? log.naverSales : (log.naver_sales !== undefined ? log.naver_sales : (log.salesVolume !== undefined ? log.salesVolume : "")),
+    coupangSales: log.coupangSales !== undefined ? log.coupangSales : (log.coupang_sales !== undefined ? log.coupang_sales : "")
   };
 }
 
@@ -471,6 +473,8 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                     keywordRanks: (local.keywordRanks && local.keywordRanks.some(r => r)) ? local.keywordRanks : cloudLog.keywordRanks,
                     coupangKeywordRanks: (local.coupangKeywordRanks && local.coupangKeywordRanks.some(r => r)) ? local.coupangKeywordRanks : cloudLog.coupangKeywordRanks,
                     memo: local.memo || cloudLog.memo,
+                    naverSales: local.naverSales !== undefined ? local.naverSales : cloudLog.naverSales,
+                    coupangSales: local.coupangSales !== undefined ? local.coupangSales : cloudLog.coupangSales,
                   });
                 }
               });
@@ -596,7 +600,11 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
             keyword_ranks: l.keywordRanks,
             coupangKeywordRanks: l.coupangKeywordRanks,
             coupang_keyword_ranks: l.coupangKeywordRanks,
-            memo: l.memo
+            memo: l.memo,
+            naverSales: l.naverSales,
+            naver_sales: l.naverSales,
+            coupangSales: l.coupangSales,
+            coupang_sales: l.coupangSales,
           }));
           await supabase.from("price_logs").upsert(supabasePayload);
         }
@@ -1032,6 +1040,26 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
     const updatedLogs = [...priceLogs];
     const log = getOrCreateLogForDate(productId, date);
     log.memo = value;
+
+    if (existingLogIndex >= 0) {
+      updatedLogs[existingLogIndex] = log;
+    } else {
+      updatedLogs.push(log);
+    }
+    saveToLocalStorage(products, updatedLogs);
+  };
+
+  const handleSalesChange = (productId: string, date: string, platform: 'naver' | 'coupang', value: string) => {
+    const existingLogIndex = priceLogs.findIndex(
+      (log) => log.productId === productId && log.date === date
+    );
+    const updatedLogs = [...priceLogs];
+    const log = getOrCreateLogForDate(productId, date);
+    if (platform === 'naver') {
+      log.naverSales = value;
+    } else {
+      log.coupangSales = value;
+    }
 
     if (existingLogIndex >= 0) {
       updatedLogs[existingLogIndex] = log;
@@ -1838,9 +1866,25 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                 <div className="flex flex-col gap-6">
                   {/* Top: Input fields */}
                   <div className="bg-white p-5 rounded-xl border border-slate-200 flex flex-col gap-4 shadow-sm">
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
                       <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> {selectedDate} 네이버 키워드 순위 입력</span>
-                      <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-xs font-semibold">✓ 자동 저장됨</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 bg-emerald-50/80 border border-emerald-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                          <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                            <span>📦</span> 당일 판매량:
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="0"
+                            value={priceLogs.find(l => l.productId === selectedProductId && l.date === selectedDate)?.naverSales ?? ""}
+                            onChange={(e) => handleSalesChange(selectedProductId, selectedDate, 'naver', e.target.value)}
+                            className="w-14 text-xs font-bold text-emerald-900 bg-white border border-emerald-300 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-emerald-500 text-center"
+                            title="네이버 당일 판매량"
+                          />
+                          <span className="text-xs text-emerald-700 font-semibold">개</span>
+                        </div>
+                        <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-xs font-semibold">✓ 자동 저장됨</span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {Array.from({ length: 6 }).map((_, i) => {
@@ -1917,9 +1961,25 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
 
                   {/* Coupang: Input fields */}
                   <div className="bg-white p-5 rounded-xl border border-slate-200 flex flex-col gap-4 shadow-sm">
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
                       <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> {selectedDate} 쿠팡 키워드 순위 입력</span>
-                      <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-xs font-semibold">✓ 자동 저장됨</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 bg-blue-50/80 border border-blue-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                          <span className="text-xs font-bold text-blue-800 flex items-center gap-1">
+                            <span>📦</span> 당일 판매량:
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="0"
+                            value={priceLogs.find(l => l.productId === selectedProductId && l.date === selectedDate)?.coupangSales ?? ""}
+                            onChange={(e) => handleSalesChange(selectedProductId, selectedDate, 'coupang', e.target.value)}
+                            className="w-14 text-xs font-bold text-blue-900 bg-white border border-blue-300 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-blue-500 text-center"
+                            title="쿠팡 당일 판매량"
+                          />
+                          <span className="text-xs text-blue-700 font-semibold">개</span>
+                        </div>
+                        <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-xs font-semibold">✓ 자동 저장됨</span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {Array.from({ length: 6 }).map((_, i) => {
@@ -2075,7 +2135,29 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                     </tr>
                                   );
                                 })}
-                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t-2 border-slate-100">
+                                {/* Naver Daily Sales Row */}
+                                <tr className="hover:bg-emerald-50/50 bg-emerald-50/10 border-t-2 border-slate-100">
+                                  <td className="p-2.5 font-bold text-emerald-800 min-w-[150px] max-w-[200px] truncate bg-emerald-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
+                                    <span>📦</span> 일일 판매량 (개)
+                                  </td>
+                                  {twoMonthDates.map(d => {
+                                    const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                    const sales = log?.naverSales !== undefined && log?.naverSales !== null ? String(log.naverSales) : "";
+                                    return (
+                                      <td key={`sales-naver-${d}`} className={`p-1 text-center border-r border-emerald-100/30 ${d === selectedDate ? 'bg-emerald-100/60' : ''}`}>
+                                        <input
+                                          type="text"
+                                          value={sales}
+                                          onChange={(e) => handleSalesChange(selectedProductId, d, 'naver', e.target.value)}
+                                          placeholder="-"
+                                          className="w-full min-w-[40px] text-[11px] px-1 py-1.5 outline-none text-emerald-900 bg-transparent text-center focus:bg-white focus:ring-1 focus:ring-emerald-400 rounded transition-all placeholder-slate-300 font-bold"
+                                          title={sales ? `네이버 판매량: ${sales}개` : "네이버 판매량 입력"}
+                                        />
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t border-slate-100">
                                   <td className="p-2.5 font-bold text-amber-800 min-w-[150px] max-w-[200px] truncate bg-amber-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
                                     <span>📝</span> 일일 특이사항 (메모)
                                   </td>
@@ -2176,7 +2258,29 @@ Return ONLY a valid JSON string (no markdown formatting, no \`\`\`json) with exa
                                     </tr>
                                   );
                                 })}
-                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t-2 border-slate-100">
+                                {/* Coupang Daily Sales Row */}
+                                <tr className="hover:bg-blue-50/50 bg-blue-50/10 border-t-2 border-slate-100">
+                                  <td className="p-2.5 font-bold text-blue-800 min-w-[150px] max-w-[200px] truncate bg-blue-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
+                                    <span>📦</span> 일일 판매량 (개)
+                                  </td>
+                                  {twoMonthDates.map(d => {
+                                    const log = priceLogs.find(l => l.productId === selectedProductId && l.date === d);
+                                    const sales = log?.coupangSales !== undefined && log?.coupangSales !== null ? String(log.coupangSales) : "";
+                                    return (
+                                      <td key={`sales-coupang-${d}`} className={`p-1 text-center border-r border-blue-100/30 ${d === selectedDate ? 'bg-blue-100/60' : ''}`}>
+                                        <input
+                                          type="text"
+                                          value={sales}
+                                          onChange={(e) => handleSalesChange(selectedProductId, d, 'coupang', e.target.value)}
+                                          placeholder="-"
+                                          className="w-full min-w-[40px] text-[11px] px-1 py-1.5 outline-none text-blue-900 bg-transparent text-center focus:bg-white focus:ring-1 focus:ring-blue-400 rounded transition-all placeholder-slate-300 font-bold"
+                                          title={sales ? `쿠팡 판매량: ${sales}개` : "쿠팡 판매량 입력"}
+                                        />
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                                <tr className="hover:bg-amber-50/50 bg-amber-50/20 border-t border-slate-100">
                                   <td className="p-2.5 font-bold text-amber-800 min-w-[150px] max-w-[200px] truncate bg-amber-50/80 sticky left-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 flex items-center gap-1.5">
                                     <span>📝</span> 일일 특이사항 (메모)
                                   </td>

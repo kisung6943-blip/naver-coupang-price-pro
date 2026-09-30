@@ -216,7 +216,9 @@ export function generateHistoricalLogs(currentProducts: Product[] = INITIAL_PROD
         difference,
         keywordRanks: naverRanks,
         coupangKeywordRanks: coupangRanks,
-        memo: sampleMemos[date] || ""
+        memo: sampleMemos[date] || "",
+        naverSales: "",
+        coupangSales: ""
       });
     });
   });

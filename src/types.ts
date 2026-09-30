@@ -22,4 +22,7 @@ export interface PriceLog {
   keywordRanks?: string[];
   coupangKeywordRanks?: string[];
   memo?: string;
+  naverSales?: number | string;
+  coupangSales?: number | string;
+  salesVolume?: number | string;
 }
